@@ -20,6 +20,7 @@
 #include "Domain/Structure/DirectionMap.hpp"
 #include "Options/Context.hpp"
 #include "Options/String.hpp"
+#include "Utilities/GetOutput.hpp"
 #include "Utilities/MakeArray.hpp"
 #include "Utilities/TMPL.hpp"
 
@@ -84,14 +85,14 @@ class Brick : public DomainCreator<3> {
         "The time dependence of the moving mesh domain."};
   };
 
-  template <typename BoundaryConditionsBase, size_t Dim>
+  template <typename BoundaryConditionsBase, size_t Dim, Side side>
   struct BoundaryCondition {
     static std::string name() {
-      return "BoundaryConditionIn" +
+      return "BoundaryConditionIn" + get_output(side) +
              std::string{Dim == 0 ? 'X' : (Dim == 1 ? 'Y' : 'Z')};
     }
     static constexpr Options::String help =
-        "The boundary condition to impose on all sides.";
+        "The boundary condition to impose in this direction.";
     using type = std::unique_ptr<BoundaryConditionsBase>;
   };
 
@@ -109,15 +110,27 @@ class Brick : public DomainCreator<3> {
               BoundaryCondition<
                   domain::BoundaryConditions::get_boundary_conditions_base<
                       typename Metavariables::system>,
-                  0>,
+                  0, Side::Lower>,
               BoundaryCondition<
                   domain::BoundaryConditions::get_boundary_conditions_base<
                       typename Metavariables::system>,
-                  1>,
+                  0, Side::Upper>,
               BoundaryCondition<
                   domain::BoundaryConditions::get_boundary_conditions_base<
                       typename Metavariables::system>,
-                  2>>,
+                  1, Side::Lower>,
+              BoundaryCondition<
+                  domain::BoundaryConditions::get_boundary_conditions_base<
+                      typename Metavariables::system>,
+                  1, Side::Upper>,
+              BoundaryCondition<
+                  domain::BoundaryConditions::get_boundary_conditions_base<
+                      typename Metavariables::system>,
+                  2, Side::Lower>,
+              BoundaryCondition<
+                  domain::BoundaryConditions::get_boundary_conditions_base<
+                      typename Metavariables::system>,
+                  2, Side::Upper>>,
           options_periodic>,
       tmpl::list<TimeDependence>>;
 
@@ -136,11 +149,17 @@ class Brick : public DomainCreator<3> {
         typename InitialRefinement::type initial_refinement_level_xyz,
         typename InitialGridPoints::type initial_number_of_grid_points_in_xyz,
         std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
-            boundary_condition_in_x = nullptr,
+            boundary_condition_in_lower_x = nullptr,
         std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
-            boundary_condition_in_y = nullptr,
+            boundary_condition_in_upper_x = nullptr,
         std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
-            boundary_condition_in_z = nullptr,
+            boundary_condition_in_lower_y = nullptr,
+        std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
+            boundary_condition_in_upper_y = nullptr,
+        std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
+            boundary_condition_in_lower_z = nullptr,
+        std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
+            boundary_condition_in_upper_z = nullptr,
         std::unique_ptr<domain::creators::time_dependence::TimeDependence<3>>
             time_dependence = nullptr,
         const Options::Context& context = {});
@@ -179,11 +198,17 @@ class Brick : public DomainCreator<3> {
   std::unique_ptr<domain::creators::time_dependence::TimeDependence<3>>
       time_dependence_;
   std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
-      boundary_condition_in_x_;
+      boundary_condition_in_lower_x_;
   std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
-      boundary_condition_in_y_;
+      boundary_condition_in_upper_x_;
   std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
-      boundary_condition_in_z_;
+      boundary_condition_in_lower_y_;
+  std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
+      boundary_condition_in_upper_y_;
+  std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
+      boundary_condition_in_lower_z_;
+  std::unique_ptr<domain::BoundaryConditions::BoundaryCondition>
+      boundary_condition_in_upper_z_;
   inline static const std::vector<std::string> block_names_{"Brick"};
 };
 }  // namespace creators
