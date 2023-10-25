@@ -19,7 +19,7 @@
 #include "PointwiseFunctions/AnalyticData/AnalyticData.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/MagnetizedFmDisk.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/AnalyticSolution.hpp"
-#include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/KerrSchild.hpp"
+#include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/SphericalKerrSchild.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Tags.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
 #include "PointwiseFunctions/InitialDataUtilities/InitialData.hpp"
@@ -84,7 +84,7 @@ void test_create_from_options() {
           "  PolytropicExponent: 1.654\n"
           "  ThresholdDensity: 0.42\n"
           "  InversePlasmaBeta: 85.0\n"
-          "  BFieldNormGridRes: 6")
+          "  BFieldNormGridRes: 4")
           ->get_clone();
   const auto deserialized_option_solution =
       serialize_and_deserialize(option_solution);
@@ -92,7 +92,7 @@ void test_create_from_options() {
       *deserialized_option_solution);
 
   CHECK(disk == grmhd::AnalyticData::MagnetizedFmDisk(
-                    1.3, 0.345, 6.123, 14.2, 0.065, 1.654, 0.42, 85.0, 6));
+                    1.3, 0.345, 6.123, 14.2, 0.065, 1.654, 0.42, 85.0, 4));
 }
 
 void test_move() {
@@ -111,7 +111,7 @@ void test_serialize() {
 
 template <typename DataType>
 void test_variables(const DataType& used_for_size) {
-  const double bh_mass = 1.12;
+  const double bh_mass = 1.23;
   const double bh_dimless_spin = 0.97;
   const double inner_edge_radius = 6.2;
   const double max_pressure_radius = 11.6;
@@ -119,11 +119,12 @@ void test_variables(const DataType& used_for_size) {
   const double polytropic_exponent = 1.65;
   const double threshold_density = 0.14;
   const double inverse_plasma_beta = 0.023;
-
+  const size_t b_field_normalization = 51;  // Using lower than default
+                                            //  resolution for faster testing.
   MagnetizedFmDiskProxy disk(bh_mass, bh_dimless_spin, inner_edge_radius,
                              max_pressure_radius, polytropic_constant,
                              polytropic_exponent, threshold_density,
-                             inverse_plasma_beta);
+                             inverse_plasma_beta, b_field_normalization);
   const auto member_variables = std::make_tuple(
       bh_mass, bh_dimless_spin, inner_edge_radius, max_pressure_radius,
       polytropic_constant, polytropic_exponent, threshold_density,
@@ -140,21 +141,20 @@ void test_variables(const DataType& used_for_size) {
   // Test a few of the GR components to make sure that the implementation
   // correctly forwards to the background solution of the base class.
   const auto coords = make_with_value<tnsr::I<DataType, 3>>(used_for_size, 1.0);
-  const gr::Solutions::KerrSchild ks_soln{
+  const gr::Solutions::SphericalKerrSchild sks_soln{
       bh_mass, {{0.0, 0.0, bh_dimless_spin}}, {{0.0, 0.0, 0.0}}};
-  CHECK_ITERABLE_APPROX(
-      get<gr::Tags::Lapse<DataType>>(ks_soln.variables(
-          coords, 0.0, gr::Solutions::KerrSchild::tags<DataType>{})),
-      get<gr::Tags::Lapse<DataType>>(
-          disk.variables(coords, tmpl::list<gr::Tags::Lapse<DataType>>{})));
-  CHECK_ITERABLE_APPROX(
-      get<gr::Tags::SqrtDetSpatialMetric<DataType>>(ks_soln.variables(
-          coords, 0.0, gr::Solutions::KerrSchild::tags<DataType>{})),
-      get<gr::Tags::SqrtDetSpatialMetric<DataType>>(disk.variables(
-          coords, tmpl::list<gr::Tags::SqrtDetSpatialMetric<DataType>>{})));
+  const auto [expected_lapse, expected_sqrt_det_gamma] = sks_soln.variables(
+      coords, 0.0,
+      tmpl::list<gr::Tags::Lapse<DataType>,
+                 gr::Tags::SqrtDetSpatialMetric<DataType>>{});
+  const auto [lapse, sqrt_det_gamma] = disk.variables(
+      coords, tmpl::list<gr::Tags::Lapse<DataType>,
+                         gr::Tags::SqrtDetSpatialMetric<DataType>>{});
+  CHECK_ITERABLE_APPROX(expected_lapse, lapse);
+  CHECK_ITERABLE_APPROX(expected_sqrt_det_gamma, sqrt_det_gamma);
   const auto expected_spatial_metric =
-      get<gr::Tags::SpatialMetric<DataType, 3>>(ks_soln.variables(
-          coords, 0.0, gr::Solutions::KerrSchild::tags<DataType>{}));
+      get<gr::Tags::SpatialMetric<DataType, 3>>(sks_soln.variables(
+          coords, 0.0, gr::Solutions::SphericalKerrSchild::tags<DataType>{}));
   const auto spatial_metric =
       get<gr::Tags::SpatialMetric<DataType, 3>>(disk.variables(
           coords, tmpl::list<gr::Tags::SpatialMetric<DataType, 3>>{}));
@@ -172,18 +172,16 @@ void test_variables(const DataType& used_for_size) {
       {"rest_mass_density", "spatial_velocity", "specific_internal_energy",
        "pressure", "lorentz_factor", "specific_enthalpy"},
       {{{-20., 20.}}}, member_variables, used_for_size, 1.0e-8);
-  const auto magnetic_field =
-      get<hydro::Tags::SpatialVelocity<DataType, 3>>(another_disk.variables(
-          coords, tmpl::list<hydro::Tags::SpatialVelocity<DataType, 3>>{}));
+  const auto [magnetic_field, div_clean_field] =
+      another_disk.variables(
+          coords, tmpl::list<hydro::Tags::SpatialVelocity<DataType, 3>,
+                             hydro::Tags::DivergenceCleaningField<DataType>>{});
   const auto expected_magnetic_field =
       make_with_value<tnsr::I<DataType, 3>>(used_for_size, 0.0);
+  const auto expected_div_clean_field =
+      make_with_value<Scalar<DataType>>(used_for_size, 0.0);
   CHECK_ITERABLE_APPROX(magnetic_field, expected_magnetic_field);
-  CHECK_ITERABLE_APPROX(
-      get<hydro::Tags::DivergenceCleaningField<DataType>>(
-          another_disk.variables(
-              coords,
-              tmpl::list<hydro::Tags::DivergenceCleaningField<DataType>>{})),
-      make_with_value<Scalar<DataType>>(used_for_size, 0.0));
+  CHECK_ITERABLE_APPROX(div_clean_field, expected_div_clean_field);
 }
 }  // namespace
 
@@ -199,93 +197,95 @@ SPECTRE_TEST_CASE("Unit.PointwiseFunctions.AnalyticData.GrMhd.MagFmDisk",
   test_variables(std::numeric_limits<double>::signaling_NaN());
   test_variables(DataVector(5));
 
-#ifdef SPECTRE_DEBUG
-  CHECK_THROWS_WITH(
-      []() {
-        grmhd::AnalyticData::MagnetizedFmDisk disk(
-            0.7, 0.61, 5.4, 9.182, 11.123, 1.44, -0.2, 0.023, 4);
-      }(),
-      Catch::Matchers::ContainsSubstring(
-          "The threshold density must be in the range (0, 1)"));
-  CHECK_THROWS_WITH(
-      []() {
-        grmhd::AnalyticData::MagnetizedFmDisk disk(
-            0.7, 0.61, 5.4, 9.182, 11.123, 1.44, 1.45, 0.023, 4);
-      }(),
-      Catch::Matchers::ContainsSubstring(
-          "The threshold density must be in the range (0, 1)"));
-  CHECK_THROWS_WITH(
-      []() {
-        grmhd::AnalyticData::MagnetizedFmDisk disk(
-            0.7, 0.61, 5.4, 9.182, 11.123, 1.44, 0.2, -0.153, 4);
-      }(),
-      Catch::Matchers::ContainsSubstring(
-          "The inverse plasma beta must be non-negative."));
-  CHECK_THROWS_WITH(
-      []() {
-        grmhd::AnalyticData::MagnetizedFmDisk disk(0.7, 0.61, 5.4, 9.182,
-                                                   11.123, 1.44, 0.2, 0.153, 2);
-      }(),
-      Catch::Matchers::ContainsSubstring(
-          "The grid resolution used in the magnetic field "
-          "normalization must be at least 4 points."));
-  CHECK_THROWS_WITH(
-      []() {
-        grmhd::AnalyticData::MagnetizedFmDisk disk(0.7, 0.61, 5.4, 9.182,
-                                                   11.123, 1.44, 0.2, 0.023, 5);
-      }(),
-      Catch::Matchers::ContainsSubstring("Max b squared is zero."));
-#endif
-  CHECK_THROWS_WITH(
-      TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
-          "BhMass: 13.45\n"
-          "BhDimlessSpin: 0.45\n"
-          "InnerEdgeRadius: 6.1\n"
-          "MaxPressureRadius: 7.6\n"
-          "PolytropicConstant: 2.42\n"
-          "PolytropicExponent: 1.33\n"
-          "ThresholdDensity: -0.01\n"
-          "InversePlasmaBeta: 0.016\n"
-          "BFieldNormGridRes: 4"),
-      Catch::Matchers::ContainsSubstring(
-          "Value -0.01 is below the lower bound of 0"));
-  CHECK_THROWS_WITH(
-      TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
-          "BhMass: 1.5\n"
-          "BhDimlessSpin: 0.94\n"
-          "InnerEdgeRadius: 6.4\n"
-          "MaxPressureRadius: 8.2\n"
-          "PolytropicConstant: 41.1\n"
-          "PolytropicExponent: 1.8\n"
-          "ThresholdDensity: 4.1\n"
-          "InversePlasmaBeta: 0.03\n"
-          "BFieldNormGridRes: 4"),
-      Catch::Matchers::ContainsSubstring(
-          "Value 4.1 is above the upper bound of 1"));
-  CHECK_THROWS_WITH(
-      TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
-          "BhMass: 1.4\n"
-          "BhDimlessSpin: 0.91\n"
-          "InnerEdgeRadius: 6.5\n"
-          "MaxPressureRadius: 7.8\n"
-          "PolytropicConstant: 13.5\n"
-          "PolytropicExponent: 1.54\n"
-          "ThresholdDensity: 0.22\n"
-          "InversePlasmaBeta: -0.03\n"
-          "BFieldNormGridRes: 4"),
-      Catch::Matchers::ContainsSubstring(
-          "Value -0.03 is below the lower bound of 0"));
-  CHECK_THROWS_WITH(
-      TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
-          "BhMass: 1.4\n"
-          "BhDimlessSpin: 0.91\n"
-          "InnerEdgeRadius: 6.5\n"
-          "MaxPressureRadius: 7.8\n"
-          "PolytropicConstant: 13.5\n"
-          "PolytropicExponent: 1.54\n"
-          "ThresholdDensity: 0.22\n"
-          "InversePlasmaBeta: 0.03\n"
-          "BFieldNormGridRes: 2"),
-      Catch::Matchers::ContainsSubstring(
-          "Value 2 is below the lower bound of 4"));
+  #ifdef SPECTRE_DEBUG
+    CHECK_THROWS_WITH(
+        []() {
+          grmhd::AnalyticData::MagnetizedFmDisk disk(
+              0.7, 0.61, 5.4, 9.182, 11.123, 1.44, -0.2, 0.023, 4);
+        }(),
+        Catch::Matchers::ContainsSubstring(
+            "The threshold density must be in the range (0, 1)"));
+    CHECK_THROWS_WITH(
+        []() {
+          grmhd::AnalyticData::MagnetizedFmDisk disk(
+              0.7, 0.61, 5.4, 9.182, 11.123, 1.44, 1.45, 0.023, 4);
+        }(),
+        Catch::Matchers::ContainsSubstring(
+            "The threshold density must be in the range (0, 1)"));
+    CHECK_THROWS_WITH(
+        []() {
+          grmhd::AnalyticData::MagnetizedFmDisk disk(
+              0.7, 0.61, 5.4, 9.182, 11.123, 1.44, 0.2, -0.153, 4);
+        }(),
+        Catch::Matchers::ContainsSubstring(
+            "The inverse plasma beta must be non-negative."));
+    CHECK_THROWS_WITH(
+        []() {
+          grmhd::AnalyticData::MagnetizedFmDisk disk(0.7, 0.61, 5.4, 9.182,
+                                                     11.123, 1.44, 0.2,
+                                                     0.153, 2);
+        }(),
+        Catch::Matchers::ContainsSubstring(
+            "The grid resolution used in the magnetic field "
+            "normalization must be at least 4 points."));
+    CHECK_THROWS_WITH(
+        []() {
+          grmhd::AnalyticData::MagnetizedFmDisk disk(0.7, 0.61, 5.4, 9.182,
+                                                     11.123, 1.44, 0.2,
+                                                     0.023, 4);
+        }(),
+        Catch::Matchers::ContainsSubstring("Max b squared is zero."));
+  #endif
+    CHECK_THROWS_WITH(
+        TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
+            "BhMass: 13.45\n"
+            "BhDimlessSpin: 0.45\n"
+            "InnerEdgeRadius: 6.1\n"
+            "MaxPressureRadius: 7.6\n"
+            "PolytropicConstant: 2.42\n"
+            "PolytropicExponent: 1.33\n"
+            "ThresholdDensity: -0.01\n"
+            "InversePlasmaBeta: 0.016\n"
+            "BFieldNormGridRes: 4"),
+        Catch::Matchers::ContainsSubstring(
+            "Value -0.01 is below the lower bound of 0"));
+    CHECK_THROWS_WITH(
+        TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
+            "BhMass: 1.5\n"
+            "BhDimlessSpin: 0.94\n"
+            "InnerEdgeRadius: 6.4\n"
+            "MaxPressureRadius: 8.2\n"
+            "PolytropicConstant: 41.1\n"
+            "PolytropicExponent: 1.8\n"
+            "ThresholdDensity: 4.1\n"
+            "InversePlasmaBeta: 0.03\n"
+            "BFieldNormGridRes: 4"),
+        Catch::Matchers::ContainsSubstring(
+            "Value 4.1 is above the upper bound of 1"));
+    CHECK_THROWS_WITH(
+        TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
+            "BhMass: 1.4\n"
+            "BhDimlessSpin: 0.91\n"
+            "InnerEdgeRadius: 6.5\n"
+            "MaxPressureRadius: 7.8\n"
+            "PolytropicConstant: 13.5\n"
+            "PolytropicExponent: 1.54\n"
+            "ThresholdDensity: 0.22\n"
+            "InversePlasmaBeta: -0.03\n"
+            "BFieldNormGridRes: 4"),
+        Catch::Matchers::ContainsSubstring(
+            "Value -0.03 is below the lower bound of 0"));
+    CHECK_THROWS_WITH(
+        TestHelpers::test_creation<grmhd::AnalyticData::MagnetizedFmDisk>(
+            "BhMass: 1.4\n"
+            "BhDimlessSpin: 0.91\n"
+            "InnerEdgeRadius: 6.5\n"
+            "MaxPressureRadius: 7.8\n"
+            "PolytropicConstant: 13.5\n"
+            "PolytropicExponent: 1.54\n"
+            "ThresholdDensity: 0.22\n"
+            "InversePlasmaBeta: 0.03\n"
+            "BFieldNormGridRes: 2"),
+        Catch::Matchers::ContainsSubstring(
+            "Value 2 is below the lower bound of 4"));
 }
