@@ -9,7 +9,7 @@
 #include "DataStructures/Tensor/TypeAliases.hpp"
 #include "Options/String.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/AnalyticSolution.hpp"
-#include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/KerrSchild.hpp"
+#include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/SphericalKerrSchild.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/Solutions.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/PolytropicFluid.hpp"  // IWYU pragma: keep
 #include "PointwiseFunctions/Hydro/TagsDeclarations.hpp"
@@ -50,10 +50,7 @@ namespace Solutions {
  * where \f$u^\mu\f$ is the 4-velocity. Then, all the fluid quantities are
  * assumed to share the same symmetries as those of the background spacetime,
  * namely they are stationary (independent of \f$t\f$), and axially symmetric
- * (independent of \f$\phi\f$). Note that \f$r\f$ and \f$\theta\f$ can also be
- * interpreted as Kerr (a.k.a. "spherical" Kerr-Schild) coordinates
- * (see gr::KerrSchildCoords), and that the symmetries of the equilibrium ensure
- * that \f$u^\mu\f$ as defined above is also the 4-velocity in Kerr coordinates.
+ * (independent of \f$\phi\f$).
  *
  * Self-gravity is neglected, so that the fluid
  * variables are determined as functions of the metric. Following the treatment
@@ -267,8 +264,9 @@ class FishboneMoncriefDisk
   }
 
   template <typename DataType>
-  using tags = tmpl::append<hydro::grmhd_tags<DataType>,
-                            typename gr::Solutions::KerrSchild::tags<DataType>>;
+  using tags =
+      tmpl::append<hydro::grmhd_tags<DataType>,
+                   typename gr::Solutions::SphericalKerrSchild::tags<DataType>>;
 
   /// @{
   /// The fluid variables in Cartesian Kerr-Schild coordinates at `(x, t)`
@@ -288,7 +286,7 @@ class FishboneMoncriefDisk
             std::is_same_v<Tags, hydro::Tags::SpatialVelocity<DataType, 3>> or
             std::is_same_v<Tags, hydro::Tags::LorentzFactor<DataType>> or
             not tmpl::list_contains_v<hydro::grmhd_tags<DataType>, Tags>)...>>
-        vars(bh_spin_a_, background_spacetime_, x, t,
+        vars(background_spacetime_, x, t,
              index_helper(
                  tmpl::index_of<tmpl::list<Tags...>,
                                 hydro::Tags::SpatialVelocity<DataType, 3>>{}),
@@ -311,7 +309,7 @@ class FishboneMoncriefDisk
         std::is_same_v<Tag, hydro::Tags::SpatialVelocity<DataType, 3>> or
             std::is_same_v<Tag, hydro::Tags::LorentzFactor<DataType>> or
             not tmpl::list_contains_v<hydro::grmhd_tags<DataType>, Tag>>
-        intermediate_vars(bh_spin_a_, background_spacetime_, x, t,
+        intermediate_vars(background_spacetime_, x, t,
                           std::numeric_limits<size_t>::max(),
                           std::numeric_limits<size_t>::max());
     return variables(x, tmpl::list<Tag>{}, intermediate_vars, 0);
@@ -416,9 +414,9 @@ class FishboneMoncriefDisk
     // called quite frequently, making some optimization worthwhile.
     if (index > vars.spatial_velocity_index and
         index > vars.lorentz_factor_index) {
-      return {std::move(get<Tag>(vars.kerr_schild_soln))};
+      return {std::move(get<Tag>(vars.sph_kerr_schild_soln))};
     }
-    return {get<Tag>(vars.kerr_schild_soln)};
+    return {get<Tag>(vars.sph_kerr_schild_soln)};
   }
 
   template <typename DataType, bool NeedSpacetime, typename Func>
@@ -429,17 +427,16 @@ class FishboneMoncriefDisk
   // solution's variables.
   template <typename DataType, bool NeedSpacetime>
   struct IntermediateVariables {
-    IntermediateVariables(double bh_spin_a,
-                          const gr::Solutions::KerrSchild& background_spacetime,
-                          const tnsr::I<DataType, 3>& x, double t,
-                          size_t in_spatial_velocity_index,
-                          size_t in_lorentz_factor_index);
+    IntermediateVariables(
+        const gr::Solutions::SphericalKerrSchild& background_spacetime,
+        const tnsr::I<DataType, 3>& x, double t,
+        size_t in_spatial_velocity_index, size_t in_lorentz_factor_index);
 
     DataType r_squared{};
     DataType sin_theta_squared{};
     tuples::tagged_tuple_from_typelist<
-        typename gr::Solutions::KerrSchild::tags<DataType>>
-        kerr_schild_soln{};
+        typename gr::Solutions::SphericalKerrSchild::tags<DataType>>
+        sph_kerr_schild_soln{};
     size_t spatial_velocity_index;
     size_t lorentz_factor_index;
   };
@@ -456,7 +453,7 @@ class FishboneMoncriefDisk
   double polytropic_exponent_ = std::numeric_limits<double>::signaling_NaN();
   double angular_momentum_ = std::numeric_limits<double>::signaling_NaN();
   EquationsOfState::PolytropicFluid<true> equation_of_state_{};
-  gr::Solutions::KerrSchild background_spacetime_{};
+  gr::Solutions::SphericalKerrSchild background_spacetime_{};
 };
 
 bool operator!=(const FishboneMoncriefDisk& lhs,

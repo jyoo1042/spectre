@@ -37,7 +37,7 @@ MagnetizedFmDisk::MagnetizedFmDisk(
       threshold_density_(threshold_density),
       inverse_plasma_beta_(inverse_plasma_beta),
       normalization_grid_res_(normalization_grid_res),
-      kerr_schild_coords_{bh_mass, bh_dimless_spin} {
+      spherical_kerr_schild_coords_{bh_mass, bh_dimless_spin} {
   ASSERT(threshold_density_ > 0.0 and threshold_density_ < 1.0,
          "The threshold density must be in the range (0, 1). The value given "
          "was "
@@ -97,7 +97,7 @@ MagnetizedFmDisk::MagnetizedFmDisk(
       get<gr::Tags::SpatialMetric<DataVector, 3>>(unmagnetized_vars);
 
   const tnsr::I<double, 3> x_max{
-      {{fm_disk_.max_pressure_radius_, fm_disk_.bh_spin_a_, 0.0}}};
+      {{fm_disk_.max_pressure_radius_, 0.0, 0.0}}};
 
   const double b_squared_max = max(
       get(dot_product(b_field, b_field, spatial_metric)) /
@@ -128,7 +128,7 @@ void MagnetizedFmDisk::pup(PUP::er& p) {
   p | inverse_plasma_beta_;
   p | b_field_normalization_;
   p | normalization_grid_res_;
-  p | kerr_schild_coords_;
+  p | spherical_kerr_schild_coords_;
 }
 
 template <typename DataType>
@@ -138,10 +138,10 @@ tnsr::I<DataType, 3> MagnetizedFmDisk::unnormalized_magnetic_field(
       make_with_value<tnsr::I<DataType, 3, Frame::NoFrame>>(x, 0.0);
 
   // The maximum pressure (and hence the maximum rest mass density) is located
-  // on the ring x^2 + y^2 = r_max^2 + a^2, z = 0.
+  // on the ring x^2 + y^2 = r_max^2, z = 0.
   // Note that `x` may or may not include points on this ring.
   const tnsr::I<double, 3> x_max{
-      {{fm_disk_.max_pressure_radius_, fm_disk_.bh_spin_a_, 0.0}}};
+      {{fm_disk_.max_pressure_radius_, 0.0, 0.0}}};
   const double threshold_rest_mass_density =
       threshold_density_ *
       get(get<hydro::Tags::RestMassDensity<double>>(variables(
@@ -174,13 +174,10 @@ tnsr::I<DataType, 3> MagnetizedFmDisk::unnormalized_magnetic_field(
       // (r, theta, phi) coordinates. We need to get B^r, B^theta, B^phi first,
       // then we transform to Cartesian coordinates.
       const double z_squared = square(get_element(get<2>(x), s));
-      const double a_squared = fm_disk_.bh_spin_a_ * fm_disk_.bh_spin_a_;
-
       double sin_theta_squared =
           square(get_element(get<0>(x), s)) + square(get_element(get<1>(x), s));
-      double r_squared = 0.5 * (sin_theta_squared + z_squared - a_squared);
-      r_squared += sqrt(square(r_squared) + a_squared * z_squared);
-      sin_theta_squared /= (r_squared + a_squared);
+      double r_squared = sin_theta_squared + z_squared;
+      sin_theta_squared /= r_squared;
 
       // B^i is proportional to derivatives of the magnetic potential. One has
       //
@@ -218,7 +215,7 @@ tnsr::I<DataType, 3> MagnetizedFmDisk::unnormalized_magnetic_field(
       // phi component of the field vanishes identically.
     }
   }
-  return kerr_schild_coords_.cartesian_from_spherical_ks(
+  return spherical_kerr_schild_coords_.cartesian_from_spherical_ks(
       std::move(magnetic_field), x);
 }
 

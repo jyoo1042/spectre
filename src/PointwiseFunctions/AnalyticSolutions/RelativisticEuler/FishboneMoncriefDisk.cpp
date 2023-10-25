@@ -11,7 +11,7 @@
 #include "DataStructures/DataVector.hpp"  // IWYU pragma: keep
 #include "DataStructures/Tensor/EagerMath/DotProduct.hpp"
 #include "DataStructures/Tensor/Tensor.hpp"
-#include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/KerrSchild.hpp"
+#include "PointwiseFunctions/AnalyticSolutions/GeneralRelativity/SphericalKerrSchild.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Tags.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
 #include "Utilities/ConstantExpressions.hpp"
@@ -75,13 +75,13 @@ void FishboneMoncriefDisk::pup(PUP::er& p) {
   p | equation_of_state_;
   p | background_spacetime_;
 }
-
+// Sigma in Fishbone&Moncrief eqn (3.5)
 template <typename DataType>
 DataType FishboneMoncriefDisk::sigma(const DataType& r_sqrd,
                                      const DataType& sin_theta_sqrd) const {
   return r_sqrd + square(bh_spin_a_) * (1.0 - sin_theta_sqrd);
 }
-
+// Inverse of A in Fishbone&Moncrief eqn (3.5)
 template <typename DataType>
 DataType FishboneMoncriefDisk::inv_ucase_a(const DataType& r_sqrd,
                                            const DataType& sin_theta_sqrd,
@@ -125,22 +125,19 @@ DataType FishboneMoncriefDisk::potential(const DataType& r_sqrd,
 
 template <typename DataType, bool NeedSpacetime>
 FishboneMoncriefDisk::IntermediateVariables<DataType, NeedSpacetime>::
-    IntermediateVariables(const double bh_spin_a,
-                          const gr::Solutions::KerrSchild& background_spacetime,
-                          const tnsr::I<DataType, 3>& x, const double t,
-                          size_t in_spatial_velocity_index,
-                          size_t in_lorentz_factor_index)
+    IntermediateVariables(
+        const gr::Solutions::SphericalKerrSchild& background_spacetime,
+        const tnsr::I<DataType, 3>& x, const double t,
+        size_t in_spatial_velocity_index, size_t in_lorentz_factor_index)
     : spatial_velocity_index(in_spatial_velocity_index),
       lorentz_factor_index(in_lorentz_factor_index) {
-  const double a_squared = bh_spin_a * bh_spin_a;
   sin_theta_squared = square(get<0>(x)) + square(get<1>(x));
-  r_squared = 0.5 * (sin_theta_squared + square(get<2>(x)) - a_squared);
-  r_squared += sqrt(square(r_squared) + a_squared * square(get<2>(x)));
-  sin_theta_squared /= (r_squared + a_squared);
+  r_squared = square(get<0>(x)) + square(get<1>(x)) + square(get<2>(x));
+  sin_theta_squared /= r_squared;
 
   if (NeedSpacetime) {
-    kerr_schild_soln = background_spacetime.variables(
-        x, t, gr::Solutions::KerrSchild::tags<DataType>{});
+    sph_kerr_schild_soln = background_spacetime.variables(
+        x, t, gr::Solutions::SphericalKerrSchild::tags<DataType>{});
   }
 }
 
@@ -154,7 +151,7 @@ FishboneMoncriefDisk::variables(
   const auto specific_enthalpy = get<hydro::Tags::SpecificEnthalpy<DataType>>(
       variables(x, tmpl::list<hydro::Tags::SpecificEnthalpy<DataType>>{}, vars,
                 index));
-  auto rest_mass_density = make_with_value<Scalar<DataType>>(x, 1.0e-15);
+  auto rest_mass_density = make_with_value<Scalar<DataType>>(x, 0.0);
   variables_impl(vars, [&rest_mass_density, &specific_enthalpy, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(rest_mass_density), s) =
@@ -279,10 +276,12 @@ FishboneMoncriefDisk::variables(
       get_element(spatial_velocity.get(i), s) =
           (gsl::at(transport_velocity, i) +
            get_element(
-               get<gr::Tags::Shift<DataType, 3>>(vars.kerr_schild_soln).get(i),
+               get<gr::Tags::Shift<DataType, 3>>(vars.sph_kerr_schild_soln)
+                   .get(i),
                s)) /
           get_element(
-              get(get<gr::Tags::Lapse<DataType>>(vars.kerr_schild_soln)), s);
+              get(get<gr::Tags::Lapse<DataType>>(vars.sph_kerr_schild_soln)),
+              s);
     }
   });
   return {std::move(spatial_velocity)};
@@ -302,7 +301,7 @@ FishboneMoncriefDisk::variables(
       1.0 /
       sqrt(1.0 - get(dot_product(spatial_velocity, spatial_velocity,
                                  get<gr::Tags::SpatialMetric<DataType, 3>>(
-                                     vars.kerr_schild_soln))))};
+                                     vars.sph_kerr_schild_soln))))};
   return {std::move(lorentz_factor)};
 }
 

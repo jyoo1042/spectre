@@ -11,7 +11,7 @@
 #include "PointwiseFunctions/AnalyticData/AnalyticData.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/AnalyticData.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/FishboneMoncriefDisk.hpp"
-#include "PointwiseFunctions/GeneralRelativity/KerrSchildCoords.hpp"
+#include "PointwiseFunctions/GeneralRelativity/SphericalKerrSchildCoords.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/PolytropicFluid.hpp"  // IWYU pragma: keep
 #include "PointwiseFunctions/Hydro/TagsDeclarations.hpp"
 #include "PointwiseFunctions/InitialDataUtilities/InitialData.hpp"
@@ -169,7 +169,7 @@ class MagnetizedFmDisk : public virtual evolution::initial_data::InitialData,
             std::is_same_v<Tags, hydro::Tags::SpatialVelocity<DataType, 3>> or
             std::is_same_v<Tags, hydro::Tags::LorentzFactor<DataType>> or
             not tmpl::list_contains_v<hydro::grmhd_tags<DataType>, Tags>)...>>
-        vars(fm_disk_.bh_spin_a_, fm_disk_.background_spacetime_, x, dummy_time,
+        vars(fm_disk_.background_spacetime_, x, dummy_time,
              FmDisk::index_helper(
                  tmpl::index_of<tmpl::list<Tags...>,
                                 hydro::Tags::SpatialVelocity<DataType, 3>>{}),
@@ -200,7 +200,7 @@ class MagnetizedFmDisk : public virtual evolution::initial_data::InitialData,
         std::is_same_v<Tag, hydro::Tags::SpatialVelocity<DataType, 3>> or
             std::is_same_v<Tag, hydro::Tags::LorentzFactor<DataType>> or
             not tmpl::list_contains_v<hydro::grmhd_tags<DataType>, Tag>>
-        intermediate_vars(fm_disk_.bh_spin_a_, fm_disk_.background_spacetime_,
+        intermediate_vars(fm_disk_.background_spacetime_,
                           x, dummy_time, std::numeric_limits<size_t>::max(),
                           std::numeric_limits<size_t>::max());
     if constexpr (std::is_same_v<hydro::Tags::MagneticField<DataType, 3>,
@@ -241,7 +241,7 @@ class MagnetizedFmDisk : public virtual evolution::initial_data::InitialData,
   double inverse_plasma_beta_ = std::numeric_limits<double>::signaling_NaN();
   double b_field_normalization_ = std::numeric_limits<double>::signaling_NaN();
   size_t normalization_grid_res_ = 255;
-  gr::KerrSchildCoords kerr_schild_coords_{};
+  gr::SphericalKerrSchildCoords spherical_kerr_schild_coords_{};
 };
 
 bool operator!=(const MagnetizedFmDisk& lhs, const MagnetizedFmDisk& rhs);

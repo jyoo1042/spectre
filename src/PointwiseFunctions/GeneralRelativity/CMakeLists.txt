@@ -26,6 +26,7 @@ spectre_target_sources(
   SpacetimeNormalOneForm.cpp
   SpacetimeNormalVector.cpp
   SpatialMetric.cpp
+  SphericalKerrSchildCoords.cpp
   TimeDerivativeOfSpacetimeMetric.cpp
   TimeDerivativeOfSpatialMetric.cpp
   Transform.cpp
@@ -58,6 +59,7 @@ spectre_target_headers(
   SpacetimeNormalOneForm.hpp
   SpacetimeNormalVector.hpp
   SpatialMetric.hpp
+  SphericalKerrSchildCoords.hpp
   Tags.hpp
   TagsDeclarations.hpp
   TimeDerivativeOfSpacetimeMetric.hpp
