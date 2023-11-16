@@ -689,3 +689,31 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using interpolating_component =
       typename Metavariables::dg_element_array_component;
 };
+
+struct WedgedSphericalSurface
+    : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
+  using temporal_id = ::Tags::Time;
+  using tags_to_observe = tmpl::list<gr::surfaces::Tags::SurfaceIntegralCompute<
+      hydro::Tags::MassFluxRadialComponent<DataVector, 3>, ::Frame::Inertial>>;
+  using vars_to_interpolate_to_target =
+      tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
+                 hydro::Tags::SpatialVelocity<DataVector, 3>,
+                 hydro::Tags::LorentzFactor<DataVector>,
+                 gr::Tags::Lapse<DataVector>, gr::Tags::Shift<DataVector, 3>,
+                 gr::Tags::SqrtDetSpatialMetric<DataVector>>;
+  using compute_items_on_target = tmpl::push_front<
+      tags_to_observe,
+      gr::surfaces::Tags::AreaElementCompute<::Frame::Inertial>,
+      hydro::Tags::MassFluxRadialComponenCompute<DataVector, 3,
+                                                 ::Frame::Inertial>>;
+  using compute_target_points =
+      intrp::TargetPoints::WedgeSectionTorus<WedgedSphericalSurface,
+                                             ::Frame::Inertial>;
+  using post_interpolation_callbacks =
+      tmpl::list<intrp::callbacks::ObserveTimeSeriesOnSurface<
+          tags_to_observe, WedgedSphericalSurface>>;
+
+  template <typename Metavariables>
+  using interpolating_component =
+      typename Metavariables::dg_element_array_component;
+};
