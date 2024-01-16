@@ -258,6 +258,8 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
       volume_dim, analytic_variables_tags, use_dg_subcell, initial_data_list>;
   using error_compute = Tags::ErrorsCompute<analytic_variables_tags>;
   using error_tags = db::wrap_tags_in<Tags::Error, analytic_variables_tags>;
+  using dt_tags =
+      db::wrap_tags_in<::Tags::dt, typename system::variables_tag::tags_list>;
   using observe_fields = tmpl::push_back<
       tmpl::append<
           typename system::variables_tag::tags_list,
@@ -270,7 +272,7 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
                   ::Events::Tags::ObserverMesh<volume_dim>,
                   ::Events::Tags::ObserverInverseJacobian<
                       volume_dim, Frame::ElementLogical, Frame::Inertial>>>,
-          error_tags,
+          error_tags, dt_tags,
           tmpl::conditional_t<
               use_dg_subcell,
               tmpl::list<
