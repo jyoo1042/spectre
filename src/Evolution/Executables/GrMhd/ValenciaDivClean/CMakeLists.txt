@@ -68,3 +68,10 @@ add_grmhd_executable(
   ""
   true
 )
+
+# for PolarFmDisk
+add_grmhd_executable(
+  PolarFmDisk
+  ExcisedHorizon
+  false
+)

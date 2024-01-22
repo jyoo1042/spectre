@@ -135,6 +135,7 @@
 #include "ParallelAlgorithms/Interpolation/Tags.hpp"
 #include "ParallelAlgorithms/Interpolation/Targets/KerrHorizon.hpp"
 #include "ParallelAlgorithms/Interpolation/Targets/SpecifiedPoints.hpp"
+#include "ParallelAlgorithms/Interpolation/Targets/WedgeSectionTorus.hpp"
 #include "PointwiseFunctions/AnalyticData/AnalyticData.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/BlastWave.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/BondiHoyleAccretion.hpp"
@@ -684,6 +685,22 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using post_interpolation_callbacks =
       tmpl::list<intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe,
                                                               KerrHorizon>>;
+
+  template <typename Metavariables>
+  using interpolating_component =
+      typename Metavariables::dg_element_array_component;
+};
+
+struct ExcisedHorizon
+    : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
+  using temporal_id = ::Tags::Time;
+  using tags_to_observe = tmpl::list<>;
+  using vars_to_interpolate_to_target =
+      tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
+                 gr::Tags::Lapse<DataVector>>;
+  using compute_items_on_target = tags_to_observe;
+  using compute_target_points =
+      intrp::TargetPoints::WedgeSectionTorus<ExcisedHorizon>;
 
   template <typename Metavariables>
   using interpolating_component =
