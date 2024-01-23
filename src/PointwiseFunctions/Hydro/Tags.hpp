@@ -275,6 +275,15 @@ struct LorentzFactorTimesSpatialVelocity : db::SimpleTag {
   using type = tnsr::I<DataType, Dim, Fr>;
 };
 
+/// FIXME: add docu later.
+template <typename DataType, size_t Dim, typename Fr>
+struct MassAccretionRate : db::SimpleTag {
+  using type = tnsr::I<DataType, Dim, Fr>;
+  static std::string name() {
+    return Frame::prefix<Fr>() + "MassAccretionRate";
+  }
+};
+
 /// The vector \f$J^i\f$ in \f$\dot{M} = -\int J^i s_i d^2S\f$,
 /// representing the mass flux through a surface with normal \f$s_i\f$.
 ///

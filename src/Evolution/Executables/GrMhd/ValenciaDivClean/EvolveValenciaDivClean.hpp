@@ -163,6 +163,7 @@
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
 #include "PointwiseFunctions/Hydro/InversePlasmaBeta.hpp"
+#include "PointwiseFunctions/Hydro/MassAccretionRate.hpp"
 #include "PointwiseFunctions/Hydro/MassFlux.hpp"
 #include "PointwiseFunctions/Hydro/QuadrupoleFormula.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
@@ -694,13 +695,18 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
 struct ExcisedHorizon
     : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using temporal_id = ::Tags::Time;
-  using tags_to_observe = tmpl::list<>;
+  using tags_to_observe = tmpl::list<
+      hydro::Tags::MassAccretionRateCompute<DataVector, 3, ::Frame::Inertial>>;
   using vars_to_interpolate_to_target =
       tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
+                 hydro::Tags::SpatialVelocity<DataVector, 3>,
                  gr::Tags::Lapse<DataVector>>;
   using compute_items_on_target = tags_to_observe;
   using compute_target_points =
       intrp::TargetPoints::WedgeSectionTorus<ExcisedHorizon>;
+  using post_interpolation_callbacks = tmpl::list<>;
+  //   tmpl::list<intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe,
+  //                                                           ExcisedHorizon>>;
 
   template <typename Metavariables>
   using interpolating_component =

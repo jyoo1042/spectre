@@ -49,6 +49,8 @@ struct MagneticFieldSquared;
 template <typename DataType>
 struct MagneticPressure;
 template <typename DataType, size_t Dim, typename Fr = Frame::Inertial>
+struct MassAccretionRate;
+template <typename DataType, size_t Dim, typename Fr = Frame::Inertial>
 struct MassFlux;
 template <typename DataType>
 struct Pressure;
