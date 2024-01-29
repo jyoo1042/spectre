@@ -21,6 +21,8 @@ spectre_target_headers(
   ObserveAdaptiveSteppingDiagnostics.hpp
   ObserveAtExtremum.hpp
   ObserveFields.hpp
+  ObserveInterpolatedData.hpp
+  ObserveInterpolatedIntegralData.hpp
   ObserveNorms.hpp
   ObserveTimeStep.hpp
   Tags.hpp
