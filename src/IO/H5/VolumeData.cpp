@@ -43,7 +43,7 @@
 
 namespace h5 {
 namespace {
-// Append the element extents and connectevity to the total extents and
+// Append the element extents and connectivity to the total extents and
 // connectivity
 void append_element_extents_and_connectivity(
     const gsl::not_null<std::vector<size_t>*> total_extents,
@@ -53,8 +53,6 @@ void append_element_extents_and_connectivity(
     const ElementVolumeData& element) {
   // Process the element extents
   const auto& extents = element.extents;
-  ASSERT(alg::none_of(extents, [](const size_t extent) { return extent == 1; }),
-         "We cannot generate connectivity for any single grid point elements.");
   if (extents.size() != dim) {
     ERROR("Trying to write data of dimensionality"
           << extents.size() << "but the VolumeData file has dimensionality"
@@ -69,7 +67,18 @@ void append_element_extents_and_connectivity(
   // out size without computing all the connectivities.
   const std::vector<int> connectivity = [&extents, &total_points_so_far]() {
     std::vector<int> local_connectivity;
-    for (const auto& cell : vis::detail::compute_cells(extents)) {
+    std::vector<size_t> extents_for_compute_cells =
+        extents;  // FIXME: changed up to 124.
+    // basically what this is doing is it removes all occurence of 1_st extent
+    // store the iterator pointing to the new end of the container after removal
+    //"removed" item technically present but shifted to the end by std::shift
+    // and they are actually removed at line 121
+    const auto new_end_it = std::remove(extents_for_compute_cells.begin(),
+                                        extents_for_compute_cells.end(), 1_st);
+    extents_for_compute_cells.erase(new_end_it,
+                                    extents_for_compute_cells.end());
+    for (const auto& cell :
+         vis::detail::compute_cells(extents_for_compute_cells)) {
       for (const auto& bounding_indices : cell.bounding_indices) {
         local_connectivity.emplace_back(*total_points_so_far +
                                         static_cast<int>(bounding_indices));
@@ -77,6 +86,7 @@ void append_element_extents_and_connectivity(
     }
     return local_connectivity;
   }();
+
   *total_points_so_far += element_num_points;
   total_connectivity->insert(total_connectivity->end(), connectivity.begin(),
                              connectivity.end());
@@ -206,7 +216,7 @@ VolumeData::VolumeData(const bool subfile_exists, detail::OpenGroup&& group,
 // an `observation_group` in a `VolumeData` file.
 void VolumeData::write_volume_data(
     const size_t observation_id, const double observation_value,
-    const std::vector<ElementVolumeData>& elements,
+    const std::vector<ElementVolumeData>& elements2,
     const std::optional<std::vector<char>>& serialized_domain,
     const std::optional<std::vector<char>>& serialized_functions_of_time) {
   const std::string path = "ObservationId" + std::to_string(observation_id);
@@ -229,6 +239,19 @@ void VolumeData::write_volume_data(
                << component.name << "'.");
     return component.name;
   };
+
+  std::vector<ElementVolumeData> elements = elements2;  // FIXME:284-293
+  // can I pop off the 1 grid point parts of the elements?
+  for (auto& element : elements) {
+    for (unsigned i = element.extents.size(); i-- > 0;) {
+      if (element.extents[i] == 1_st) {
+        element.extents.erase(element.extents.begin() + i);
+        element.basis.erase(element.basis.begin() + i);
+        element.quadrature.erase(element.quadrature.begin() + i);
+      }
+    }
+  }
+
   const std::vector<std::string> component_names(
       boost::make_transform_iterator(elements.front().tensor_components.begin(),
                                      get_component_name),
@@ -240,6 +263,7 @@ void VolumeData::write_volume_data(
   // should have the same dimensionality)
   if (not contains_attribute(volume_data_group_.id(), "", "dimension")) {
     h5::write_to_attribute(volume_data_group_.id(), "dimension",
+                           //  1);
                            elements.front().extents.size());
   }
   const auto dim =
@@ -402,8 +426,7 @@ void VolumeData::extend_connectivity_data(
 
 void VolumeData::write_tensor_component(
     const size_t observation_id, const std::string& component_name,
-    const DataVector& contiguous_tensor_data,
-    const bool overwrite_existing) {
+    const DataVector& contiguous_tensor_data, const bool overwrite_existing) {
   const std::string path = "ObservationId" + std::to_string(observation_id);
   detail::OpenGroup observation_group(volume_data_group_.id(), path,
                                       AccessType::ReadWrite);
