@@ -9,6 +9,8 @@
 #include "ParallelAlgorithms/Events/ErrorIfDataTooBig.hpp"
 #include "ParallelAlgorithms/Events/ObserveAdaptiveSteppingDiagnostics.hpp"
 #include "ParallelAlgorithms/Events/ObserveFields.hpp"
+#include "ParallelAlgorithms/Events/ObserveInterpolatedData.hpp"
+#include "ParallelAlgorithms/Events/ObserveInterpolatedIntegralData.hpp"
 #include "ParallelAlgorithms/Events/ObserveNorms.hpp"
 #include "ParallelAlgorithms/Events/ObserveTimeStep.hpp"
 #include "Time/Actions/ChangeSlabSize.hpp"
@@ -21,6 +23,10 @@ using field_observations = tmpl::flatten<tmpl::list<
     ::Events::ErrorIfDataTooBig<VolumeDim, Fields, NonTensorComputeTagsList>,
     ObserveFields<VolumeDim, Fields, NonTensorComputeTagsList,
                   ArraySectionIdTag>,
+    ObserveInterpolatedData<VolumeDim, Fields, NonTensorComputeTagsList,
+                            ArraySectionIdTag>,
+    ObserveInterpolatedIntegralData<VolumeDim, Fields, NonTensorComputeTagsList,
+                                    ArraySectionIdTag>,
     ::Events::ObserveNorms<Fields, NonTensorComputeTagsList,
                            ArraySectionIdTag>>>;
 }  // namespace dg::Events

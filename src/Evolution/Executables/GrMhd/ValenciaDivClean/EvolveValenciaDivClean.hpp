@@ -158,6 +158,7 @@
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/RotatingStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/TovStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/Tags.hpp"
+#include "PointwiseFunctions/GeneralRelativity/DetAndInverseSpatialMetric.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Surfaces/Tags.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
@@ -309,7 +310,11 @@ struct EvolutionMetavars<InitialData, tmpl::list<InterpolationTargetTags...>> {
           ::Events::Tags::ObserverCoordinates<volume_dim, Frame::Inertial>,
           hydro::Tags::TransportVelocity<DataVector, volume_dim,
                                          Frame::Inertial>>,
-      hydro::Tags::InversePlasmaBetaCompute<DataVector>>;
+      hydro::Tags::InversePlasmaBetaCompute<DataVector>,
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
+      gr::Tags::SqrtDetSpatialMetric<DataVector>,
+      gr::Tags::SpatialMetric<DataVector, 3, ::Frame::Inertial>,
+      gr::Tags::Lapse<DataVector>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
