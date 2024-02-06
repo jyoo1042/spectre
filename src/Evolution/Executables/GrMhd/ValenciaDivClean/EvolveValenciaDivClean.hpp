@@ -308,7 +308,8 @@ struct EvolutionMetavars<InitialData, tmpl::list<InterpolationTargetTags...>> {
           ::Events::Tags::ObserverCoordinates<volume_dim, Frame::Inertial>,
           hydro::Tags::TransportVelocity<DataVector, volume_dim,
                                          Frame::Inertial>>,
-      hydro::Tags::InversePlasmaBetaCompute<DataVector>>;
+      hydro::Tags::InversePlasmaBetaCompute<DataVector>,
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
