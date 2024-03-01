@@ -71,8 +71,7 @@ void test(const EquationOfStateType& eos) {
       grmhd::ValenciaDivClean::Tags::VariablesNeededFixing,
       typename System::variables_tag, typename System::primitive_variables_tag,
       ::Tags::VariableFixer<grmhd::ValenciaDivClean::FixConservatives>,
-      hydro::Tags::EquationOfState<std::unique_ptr<
-          typename EquationsOfState::get_eos_base<EquationOfStateType>>>,
+      hydro::Tags::GrmhdEquationOfState,
       grmhd::ValenciaDivClean::Tags::PrimitiveFromConservativeOptions>>(
       subcell_coords, false, cons_vars,
       typename System::primitive_variables_tag::type{num_pts, 1.0e-4},
@@ -130,7 +129,6 @@ void test(const EquationOfStateType& eos) {
 SPECTRE_TEST_CASE(
     "Unit.Evolution.Systems.GhValenciaDivClean.Subcell.FixConsAndComputePrims",
     "[Unit][Evolution]") {
-  test(EquationsOfState::PolytropicFluid<true>(100.0, 2.0));
   test(EquationsOfState::Barotropic3D(
       EquationsOfState::PolytropicFluid<true>(100.0, 2.0)));
 }
