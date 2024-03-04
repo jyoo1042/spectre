@@ -102,6 +102,11 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
     return std::numeric_limits<double>::max();
   }
 
+  /// The lower bound of the temperature that is valid for this EOS
+  double temperature_lower_bound() const override {
+    return 1e-8;  // FIXME: fix this hard coding later.
+  }
+
   /// The lower bound of the specific internal energy that is valid for this EOS
   /// at the given rest mass density \f$\rho\f$
   double specific_internal_energy_lower_bound(
