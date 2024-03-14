@@ -231,8 +231,20 @@ struct SendDataForReconstruction {
         // } else { std::copy(...); }
         //
         // Copy over data since it's already oriented from interpolation
-        std::copy(sliced_data_in_direction.begin(),
-                  sliced_data_in_direction.end(), subcell_data_to_send.begin());
+        //
+        // hacky solution to remove the negative rho interpolation problem
+        size_t N = sliced_data_in_direction.size();
+        DataVector temp{N};
+        for (size_t i = 0; i < N; i++) {
+          temp[i] = sliced_data_in_direction[i];
+        }
+        for (size_t i = 0; i < 363; i++) {
+          if (temp[i] < 1e-12) {
+            temp[i] = 1e-12;
+          }
+        }
+        std::copy(temp.begin(), temp.end(), subcell_data_to_send.begin());
+
         // Copy rdmp data to end of subcell_data_to_send
         std::copy(
             rdmp_tci_data.max_variables_values.cbegin(),
