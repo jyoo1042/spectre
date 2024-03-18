@@ -62,9 +62,17 @@ add_grmhd_executable(
   false
 )
 
+add_grmhd_executable(
+  WithSphere
+  Sphere
+  false
+)
+
 # Core-collpase SN uses parametrized deleptonization
 add_grmhd_executable(
   CoreCollapseSupernova
   ""
   true
 )
+
+
