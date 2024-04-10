@@ -316,7 +316,7 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
       hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
       gr::Tags::SqrtDetSpatialMetric<DataVector>,
       gr::Tags::SpatialMetric<DataVector, 3, ::Frame::Inertial>,
-      gr::Tags::Lapse<DataVector>>;
+      gr::Tags::Shift<DataVector, 3>, gr::Tags::Lapse<DataVector>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
