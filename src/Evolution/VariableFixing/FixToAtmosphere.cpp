@@ -2,7 +2,6 @@
 // See LICENSE.txt for details.
 
 #include "Evolution/VariableFixing/FixToAtmosphere.hpp"
-
 #include <limits>
 #include <pup.h>
 
@@ -10,6 +9,8 @@
 #include "DataStructures/Tensor/Tensor.hpp"
 #include "Options/ParseError.hpp"
 #include "Utilities/GenerateInstantiations.hpp"
+#include "Utilities/Serialization/PupStlCpp17.hpp"
+
 
 namespace VariableFixing {
 
@@ -17,11 +18,15 @@ template <size_t Dim>
 FixToAtmosphere<Dim>::FixToAtmosphere(
     const double density_of_atmosphere, const double density_cutoff,
     const double transition_density_cutoff, const double max_velocity_magnitude,
+    const std::optional<double> magnetization_bound,
+    const std::optional<double> plasma_beta_bound,
     const Options::Context& context)
     : density_of_atmosphere_(density_of_atmosphere),
       density_cutoff_(density_cutoff),
       transition_density_cutoff_(transition_density_cutoff),
-      max_velocity_magnitude_(max_velocity_magnitude) {
+      max_velocity_magnitude_(max_velocity_magnitude),
+      magnetization_bound_(magnetization_bound),
+      plasma_beta_bound_(plasma_beta_bound) {
   if (density_of_atmosphere_ > density_cutoff_) {
     PARSE_ERROR(context, "The cutoff density ("
                              << density_cutoff_
@@ -42,6 +47,28 @@ FixToAtmosphere<Dim>::FixToAtmosphere(
                              << ") must be bigger than the density cutoff ("
                              << density_cutoff_ << ")");
   }
+  if (magnetization_bound.has_value() != plasma_beta_bound.has_value()) {
+    PARSE_ERROR(context,
+                "Both input values should be assigned for "
+                "magnetization bound and plasma beta bound "
+                "or they should be both None.");
+  }
+  if (magnetization_bound.has_value()) {
+    if (magnetization_bound < 0.0) {
+      PARSE_ERROR(context,
+                  "Upper bound of magnetization bound "
+                  "must be positive, but is  "
+                      << magnetization_bound.value());
+    }
+  }
+  if (plasma_beta_bound.has_value()) {
+    if (plasma_beta_bound < 0.0) {
+      PARSE_ERROR(context,
+                  "Upper bound of plsma beta bound "
+                  "must be positive, but is  "
+                      << plasma_beta_bound.value());
+    }
+  }
 }
 
 template <size_t Dim>
@@ -51,6 +78,8 @@ void FixToAtmosphere<Dim>::pup(PUP::er& p) {
   p | density_cutoff_;
   p | transition_density_cutoff_;
   p | max_velocity_magnitude_;
+  p | magnetization_bound_;
+  p | plasma_beta_bound_;
 }
 
 template <size_t Dim>
@@ -64,6 +93,7 @@ void FixToAtmosphere<Dim>::operator()(
     const gsl::not_null<Scalar<DataVector>*> pressure,
     const gsl::not_null<Scalar<DataVector>*> temperature,
     const Scalar<DataVector>& electron_fraction,
+    const tnsr::I<DataVector, Dim, Frame::Inertial>& magnetic_field,
     const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
     const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
         equation_of_state) const {
@@ -88,7 +118,7 @@ void FixToAtmosphere<Dim>::operator()(
       if (const double min_temperature =
               equation_of_state.temperature_lower_bound();
           get(*temperature)[i] < min_temperature) {
-        get(*temperature)[i] = min_temperature;
+          get(*temperature)[i] = min_temperature;
         changed_temperature = true;
       }
 
@@ -126,6 +156,30 @@ void FixToAtmosphere<Dim>::operator()(
                   Scalar<double>{get(electron_fraction)[i]}));
         }
       }
+    }
+    if (magnetization_bound_.has_value() and plasma_beta_bound_.has_value()) {
+      double magnetic_field_squared = 0.0;
+      double magnetic_field_dot_v = 0.0;
+
+      for (size_t j = 0; j < Dim; ++j) {
+        for (size_t k = 0; k < Dim; ++k) {
+          magnetic_field_squared += magnetic_field.get(j)[i] *
+                                    magnetic_field.get(k)[i] *
+                                    spatial_metric.get(j, k)[i];
+
+          magnetic_field_dot_v += magnetic_field.get(j)[i] *
+                                  spatial_velocity->get(k)[i] *
+                                  spatial_metric.get(j, k)[i];
+        }
+      }
+
+      double comoving_magnetic_field_squared =
+          (magnetic_field_squared / (square(get(*lorentz_factor)[i]))) +
+          square(magnetic_field_dot_v);
+      high_magnetiziation_treatment(rest_mass_density, specific_internal_energy,
+                                    temperature, pressure, electron_fraction,
+                                    comoving_magnetic_field_squared,
+                                    equation_of_state, i);
     }
   }
 }
@@ -213,12 +267,94 @@ void FixToAtmosphere<Dim>::set_to_magnetic_free_transition(
 }
 
 template <size_t Dim>
+template <size_t ThermodynamicDim>
+void FixToAtmosphere<Dim>::high_magnetiziation_treatment(
+    const gsl::not_null<Scalar<DataVector>*> rest_mass_density,
+    const gsl::not_null<Scalar<DataVector>*> specific_internal_energy,
+    const gsl::not_null<Scalar<DataVector>*> temperature,
+    const gsl::not_null<Scalar<DataVector>*> pressure,
+    const Scalar<DataVector>& electron_fraction,
+    const double comoving_magnetic_field_squared,
+    const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
+        equation_of_state,
+    const size_t grid_index) const {
+  using std::max;
+  using std::min;
+  const double sigma_bound = magnetization_bound_.value();
+  const double beta_bound = plasma_beta_bound_.value();
+
+  // Increment rest_mass_density and temperature until magnetization and beta
+  // are bounded above by some prescribed values. this is so that we are not in
+  // extremly high magnetized regions in our simulation which could lead to
+  // failure with PrimitiveRecovery.
+
+  get(*rest_mass_density)[grid_index] =
+      max(get(*rest_mass_density)[grid_index],
+          comoving_magnetic_field_squared / sigma_bound);
+  get(*pressure)[grid_index] =
+      max(get(*pressure)[grid_index],
+          comoving_magnetic_field_squared / (2 * beta_bound));
+
+  const Scalar<double> updated_density{get(*rest_mass_density)[grid_index]};
+  // Since all the EoS functions take either temperature or
+  // specific_internal_energy recast the incrementation in pressure into
+  // incrementation in temperature.
+  get(*temperature)[grid_index] =
+      get(*pressure)[grid_index] / get(*rest_mass_density)[grid_index];
+  const Scalar<double> updated_temperature{get(*temperature)[grid_index]};
+
+  // re-adjust the other thermodynamics variable in accordance
+  // with changes in rest_mass_density and temperature (pressure)
+  const bool eos_is_barotropic = equation_of_state.is_barotropic();
+
+  if constexpr (ThermodynamicDim == 1) {
+    pressure->get()[grid_index] = get(equation_of_state.pressure_from_density(
+        updated_density));
+    specific_internal_energy->get()[grid_index] =
+        get(equation_of_state.specific_internal_energy_from_density(
+            updated_density));
+  } else {
+    if constexpr (ThermodynamicDim == 2) {
+      specific_internal_energy->get()[grid_index] =
+          get(equation_of_state
+                  .specific_internal_energy_from_density_and_temperature(
+                      updated_density,
+                      updated_temperature));
+    } else {
+      if (eos_is_barotropic) {
+        // for now, for barotropic runs, just apply the sigma bounds
+        // and recompute other quantities from updates rest_mass_density
+        get(*pressure)[grid_index] =
+            get(equation_of_state.pressure_from_density_and_temperature(
+                updated_density, updated_temperature,
+                Scalar<double>{get(electron_fraction)[grid_index]}));
+        get(*temperature)[grid_index] =
+            get(*pressure)[grid_index] / get(*rest_mass_density)[grid_index];
+        specific_internal_energy->get()[grid_index] =
+            get(equation_of_state
+                    .specific_internal_energy_from_density_and_temperature(
+                        updated_density, updated_temperature,
+                        Scalar<double>{get(electron_fraction)[grid_index]}));
+      } else {
+        specific_internal_energy->get()[grid_index] =
+            get(equation_of_state
+                    .specific_internal_energy_from_density_and_temperature(
+                        updated_density, updated_temperature,
+                        Scalar<double>{get(electron_fraction)[grid_index]}));
+      }
+    }
+  }
+}
+
+template <size_t Dim>
 bool operator==(const FixToAtmosphere<Dim>& lhs,
                 const FixToAtmosphere<Dim>& rhs) {
   return lhs.density_of_atmosphere_ == rhs.density_of_atmosphere_ and
          lhs.density_cutoff_ == rhs.density_cutoff_ and
          lhs.transition_density_cutoff_ == rhs.transition_density_cutoff_ and
-         lhs.max_velocity_magnitude_ == rhs.max_velocity_magnitude_;
+         lhs.max_velocity_magnitude_ == rhs.max_velocity_magnitude_ and
+         lhs.magnetization_bound_ == rhs.magnetization_bound_ and
+         lhs.plasma_beta_bound_ == rhs.plasma_beta_bound_;
 }
 
 template <size_t Dim>
@@ -251,6 +387,7 @@ GENERATE_INSTANTIATIONS(INSTANTIATION, (1, 2, 3))
       const gsl::not_null<Scalar<DataVector>*> pressure,                      \
       const gsl::not_null<Scalar<DataVector>*> temperature,                   \
       const Scalar<DataVector>& electron_fraction,                            \
+      const tnsr::I<DataVector, DIM(data), Frame::Inertial>& magnetic_field,  \
       const tnsr::ii<DataVector, DIM(data), Frame::Inertial>& spatial_metric, \
       const EquationsOfState::EquationOfState<true, THERMO_DIM(data)>&        \
           equation_of_state) const;

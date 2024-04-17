@@ -95,9 +95,35 @@ class FixToAtmosphere {
         "below TransitionDensityCutoff."};
   };
 
+  /// \brief Additional flooring treatment applied on highly magnetized region.
+  /// Prescribes an upperbound on magnetization and plasma beta.
+  /// `MagneticFieldTreatment`
+  struct MagneticFieldTreatment {
+    static constexpr Options::String help = {
+        "Additinoal treatment for highly magnetized region."
+        "These parameters sets bound on magnetization and plasma beta. "
+        "Both values should be supplied."};
+  };
+  /// \brief Upperbound for magnetization = b^2/rho.
+  /// 'MagnetizationBound'
+  struct MagnetizationBound {
+    static std::string name() { return "MagnetizationBound"; }
+    static constexpr Options::String help{"Bound for Magneizations."};
+    using type = Options::Auto<double, Options::AutoLabel::None>;
+    using group = MagneticFieldTreatment;
+  };
+  /// \brief Upperbound for plasma beta = b^2/(2*P).
+  /// 'PlasmaBetaBound'
+  struct PlasmaBetaBound {
+    static std::string name() { return "PlasmaBetaBound"; }
+    static constexpr Options::String help{"Bound for Plasma Beta."};
+    using type = Options::Auto<double, Options::AutoLabel::None>;
+    using group = MagneticFieldTreatment;
+  };
+
   using options =
       tmpl::list<DensityOfAtmosphere, DensityCutoff, TransitionDensityCutoff,
-                 MaxVelocityMagnitude>;
+                 MaxVelocityMagnitude, MagnetizationBound, PlasmaBetaBound>;
   static constexpr Options::String help = {
       "If the rest mass density is below DensityCutoff, it is set\n"
       "to DensityOfAtmosphere, and the pressure, and specific internal energy\n"
@@ -110,6 +136,8 @@ class FixToAtmosphere {
   FixToAtmosphere(double density_of_atmosphere, double density_cutoff,
                   double transition_density_cutoff,
                   double max_velocity_magnitude,
+                  std::optional<double> magnetization_bound,
+                  std::optional<double> plasma_beta_bound,
                   const Options::Context& context = {});
 
   FixToAtmosphere() = default;
@@ -130,6 +158,7 @@ class FixToAtmosphere {
                  hydro::Tags::Pressure<DataVector>,
                  hydro::Tags::Temperature<DataVector>>;
   using argument_tags = tmpl::list<hydro::Tags::ElectronFraction<DataVector>,
+                                   hydro::Tags::MagneticField<DataVector, Dim>,
                                    gr::Tags::SpatialMetric<DataVector, Dim>,
                                    hydro::Tags::EquationOfStateBase>;
 
@@ -144,6 +173,7 @@ class FixToAtmosphere {
       gsl::not_null<Scalar<DataVector>*> pressure,
       gsl::not_null<Scalar<DataVector>*> temperature,
       const Scalar<DataVector>& electron_fraction,
+      const tnsr::I<DataVector, Dim, Frame::Inertial>& magnetic_field,
       const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
       const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
           equation_of_state) const;
@@ -168,6 +198,18 @@ class FixToAtmosphere {
       const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
       size_t grid_index) const;
 
+  template <size_t ThermodynamicDim>
+  void high_magnetiziation_treatment(
+      gsl::not_null<Scalar<DataVector>*> rest_mass_density,
+      gsl::not_null<Scalar<DataVector>*> specific_internal_energy,
+      gsl::not_null<Scalar<DataVector>*> temperature,
+      gsl::not_null<Scalar<DataVector>*> pressure,
+      const Scalar<DataVector>& electron_fraction,
+      const double comoving_magnetic_field_squared,
+      const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
+          equation_of_state,
+      size_t grid_index) const;
+
   template <size_t SpatialDim>
   // NOLINTNEXTLINE(readability-redundant-declaration)
   friend bool operator==(const FixToAtmosphere<SpatialDim>& lhs,
@@ -178,6 +220,8 @@ class FixToAtmosphere {
   double transition_density_cutoff_{
       std::numeric_limits<double>::signaling_NaN()};
   double max_velocity_magnitude_{std::numeric_limits<double>::signaling_NaN()};
+  std::optional<double> magnetization_bound_;
+  std::optional<double> plasma_beta_bound_;
 };
 
 template <size_t Dim>

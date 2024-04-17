@@ -226,12 +226,15 @@ FishboneMoncriefDisk::variables(
   const auto rest_mass_density = get<hydro::Tags::RestMassDensity<DataType>>(
       variables(x, tmpl::list<hydro::Tags::RestMassDensity<DataType>>{}, vars));
 
-  auto temperature = make_with_value<Scalar<DataType>>(x, 0.0);
+  auto temperature = make_with_value<Scalar<DataType>>(x, 1.e-13);
   variables_impl(vars, [&temperature, &rest_mass_density, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(temperature), s) =
-        get(equation_of_state_.temperature_from_density(
-            Scalar<double>{get_element(get(rest_mass_density), s)}));
+        polytropic_constant_ *
+        pow(get_element(get(rest_mass_density), s), polytropic_exponent_ - 1.0);
+    // get_element(get(temperature), s) =
+    //     get(equation_of_state_.temperature_from_density(
+    //         Scalar<double>{get_element(get(rest_mass_density), s)}));
   });
   return {std::move(temperature)};
 }
