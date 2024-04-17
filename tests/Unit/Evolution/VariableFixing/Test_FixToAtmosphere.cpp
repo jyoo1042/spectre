@@ -41,6 +41,9 @@ void test_variable_fixer(
   auto spatial_velocity =
       make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
   spatial_velocity.get(0) = DataVector{0.8, 0.7, 0.6};
+  auto magnetic_field =
+      make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
+  magnetic_field.get(0) = DataVector{0.2, 0.3, 0.4};
   auto spatial_metric =
       make_with_value<tnsr::ii<DataVector, Dim, Frame::Inertial>>(density, 0.0);
   for (size_t i = 0; i < Dim; ++i) {
@@ -48,7 +51,7 @@ void test_variable_fixer(
   }
   variable_fixer(&density, &specific_internal_energy, &spatial_velocity,
                  &lorentz_factor, &pressure, &temperature, electron_fraction,
-                 spatial_metric, equation_of_state);
+                 magnetic_field, spatial_metric, equation_of_state);
 
   Scalar<DataVector> expected_density{DataVector{1.e-12, 2.e-11, 4.e-12}};
   auto expected_pressure =
@@ -99,6 +102,11 @@ void test_variable_fixer(
       make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.);
   spatial_velocity.get(0) = DataVector{0.8, 0.7, 0.6, 0.7};
   CHECK(spatial_velocity.get(0).size() == get(density).size());
+  auto magnetic_field =
+      make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
+  magnetic_field.get(0) = DataVector{0.2, 0.3, 0.4, 0.5};
+  CHECK(magnetic_field.get(0).size() == get(density).size());
+
   auto spatial_metric =
       make_with_value<tnsr::ii<DataVector, Dim, Frame::Inertial>>(density, 0.);
   for (size_t i = 0; i < Dim; ++i) {
@@ -106,7 +114,7 @@ void test_variable_fixer(
   }
   variable_fixer(&density, &specific_internal_energy, &spatial_velocity,
                  &lorentz_factor, &pressure, &temperature, electron_fraction,
-                 spatial_metric, equation_of_state);
+                 magnetic_field, spatial_metric, equation_of_state);
 
   Scalar<DataVector> expected_density{
       DataVector{1.e-12, 2.e-11, 4.e-12, 2.e-11}};
@@ -149,7 +157,8 @@ template <size_t Dim>
 void test_variable_fixer() {
   // Test for representative 1-d equation of state
   VariableFixing::FixToAtmosphere<Dim> variable_fixer{1.e-12, 3.e-12, 1.e-11,
-                                                      1.e-4};
+                                                      1.e-4, std::nullopt,
+                                                      std::nullopt};
   EquationsOfState::PolytropicFluid<true> polytrope{1.0, 2.0};
   test_variable_fixer<Dim>(variable_fixer, polytrope);
   test_serialization(variable_fixer);
@@ -159,7 +168,10 @@ void test_variable_fixer() {
           "DensityOfAtmosphere: 1.0e-12\n"
           "DensityCutoff: 3.0e-12\n"
           "TransitionDensityCutoff: 1.0e-11\n"
-          "MaxVelocityMagnitude: 1.0e-4\n");
+          "MaxVelocityMagnitude: 1.0e-4\n"
+          "MagneticFieldTreatment:\n"
+          " MagnetizationBound: None\n"
+          " PlasmaBetaBound: None\n");
   test_variable_fixer(fixer_from_options, polytrope);
 
   // Test for representative 2-d equation of state
