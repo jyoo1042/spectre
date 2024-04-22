@@ -214,7 +214,7 @@ bool FixConservatives::operator()(
     const gsl::not_null<Scalar<DataVector>*> tilde_ye,
     const gsl::not_null<Scalar<DataVector>*> tilde_tau,
     const gsl::not_null<tnsr::i<DataVector, 3, Frame::Inertial>*> tilde_s,
-    const tnsr::I<DataVector, 3, Frame::Inertial>& tilde_b,
+    const gsl::not_null<tnsr::I<DataVector, 3, Frame::Inertial>*> tilde_b,
     const tnsr::ii<DataVector, 3, Frame::Inertial>& spatial_metric,
     const tnsr::II<DataVector, 3, Frame::Inertial>& inv_spatial_metric,
     const Scalar<DataVector>& sqrt_det_spatial_metric) const {
@@ -222,11 +222,22 @@ bool FixConservatives::operator()(
   if (not enable_) {
     return needed_fixing;
   }
-  const size_t size = get<0>(tilde_b).size();
+  const size_t size = tilde_d->get().size();
   Variables<tmpl::list<::Tags::TempScalar<1>, ::Tags::TempScalar<2>,
                        ::Tags::TempScalar<3>>>
       temp_buffer(size);
 
+  // Set TildeB to zero if its absolute value is below 1e-50.
+  // This is to prevent a negative value of tilde_b_squared,
+  // which can occur for very low magnetic field ~ 1e-160,
+  // leading to arithmetic operations on float ~ 1e-320.
+  for (size_t i = 0; i < size; i++) {
+    for (size_t j = 0; j < 3; j++) {
+      if (abs(tilde_b->get(j)[i]) < 1e-90) {
+        tilde_b->get(j)[i] = 0.0;
+      }
+    }
+  }
   Scalar<DataVector>& tilde_s_squared = get<::Tags::TempScalar<2>>(temp_buffer);
   dot_product(make_not_null(&tilde_s_squared), *tilde_s, *tilde_s,
               inv_spatial_metric);
@@ -236,8 +247,8 @@ bool FixConservatives::operator()(
   if (magnetic_field_treatment_ == hydro::MagneticFieldTreatment::CheckIfZero) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
     const_cast<bool&>(non_zero_mag) =
-        (max(max(abs(get<0>(tilde_b)), abs(get<1>(tilde_b)),
-                 abs(get<2>(tilde_b)))) > 0.0);
+        (max(max(abs(get<0>(*tilde_b)), abs(get<1>(*tilde_b)),
+                 abs(get<2>(*tilde_b)))) > 0.0);
   }
 
   Scalar<DataVector>& tilde_b_squared = get<::Tags::TempScalar<1>>(temp_buffer);
@@ -245,9 +256,9 @@ bool FixConservatives::operator()(
       get<::Tags::TempScalar<3>>(temp_buffer);
 
   if (non_zero_mag) {
-    dot_product(make_not_null(&tilde_b_squared), tilde_b, tilde_b,
+    dot_product(make_not_null(&tilde_b_squared), *tilde_b, *tilde_b,
                 spatial_metric);
-    dot_product(make_not_null(&tilde_s_dot_tilde_b), *tilde_s, tilde_b);
+    dot_product(make_not_null(&tilde_s_dot_tilde_b), *tilde_s, *tilde_b);
   }
 
   const double one_over_one_minus_safety_factor_for_magnetic_field =
@@ -491,7 +502,7 @@ bool FixConservatives::operator()(
             << "\n  tau_over_d = " << tau_over_d
             << "\n  normalized_s_dot_b = " << normalized_s_dot_b
             << "\n  tilde_s =\n" << extract_point(*tilde_s, grid_index)
-            << "\n  tilde_b =\n" << extract_point(tilde_b, grid_index)
+            << "\n  tilde_b =\n" << extract_point(*tilde_b, grid_index)
             << "\n  spatial_metric =\n"
             << extract_point(spatial_metric, grid_index)
             << "\n  inv_spatial_metric =\n"

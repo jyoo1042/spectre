@@ -158,6 +158,7 @@
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/RotatingStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/TovStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/Tags.hpp"
+#include "PointwiseFunctions/GeneralRelativity/DetAndInverseSpatialMetric.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Surfaces/Tags.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
@@ -247,9 +248,10 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
           typename InterpolationTargetTags::vars_to_interpolate_to_target...>>>;
 
   using ordered_list_of_primitive_recovery_schemes = tmpl::list<
-      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::KastaunEtAl,
-      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::NewmanHamlin,
-      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::PalenzuelaEtAl>;
+      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::KastaunEtAl>;
+  //   ,
+  //   grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::NewmanHamlin,
+  //   grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::PalenzuelaEtAl>;
 
   using interpolation_target_tags = tmpl::list<InterpolationTargetTags...>;
 
@@ -309,7 +311,11 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
           ::Events::Tags::ObserverCoordinates<volume_dim, Frame::Inertial>,
           hydro::Tags::TransportVelocity<DataVector, volume_dim,
                                          Frame::Inertial>>,
-      hydro::Tags::InversePlasmaBetaCompute<DataVector>>;
+      hydro::Tags::InversePlasmaBetaCompute<DataVector>,
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
+      gr::Tags::SqrtDetSpatialMetric<DataVector>,
+      gr::Tags::SpatialMetric<DataVector, 3, ::Frame::Inertial>,
+      gr::Tags::Lapse<DataVector>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
