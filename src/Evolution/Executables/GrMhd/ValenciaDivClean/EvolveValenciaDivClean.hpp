@@ -126,6 +126,7 @@
 #include "ParallelAlgorithms/Interpolation/Actions/InterpolatorReceiveVolumeData.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/InterpolatorRegisterElement.hpp"
 #include "ParallelAlgorithms/Interpolation/Actions/TryToInterpolate.hpp"
+#include "ParallelAlgorithms/Interpolation/Callbacks/ObserveSurfaceData.hpp"
 #include "ParallelAlgorithms/Interpolation/Callbacks/ObserveTimeSeriesOnSurface.hpp"
 #include "ParallelAlgorithms/Interpolation/Events/Interpolate.hpp"
 #include "ParallelAlgorithms/Interpolation/Events/InterpolateWithoutInterpComponent.hpp"
@@ -135,6 +136,7 @@
 #include "ParallelAlgorithms/Interpolation/Tags.hpp"
 #include "ParallelAlgorithms/Interpolation/Targets/KerrHorizon.hpp"
 #include "ParallelAlgorithms/Interpolation/Targets/SpecifiedPoints.hpp"
+#include "ParallelAlgorithms/Interpolation/Targets/Sphere.hpp"
 #include "PointwiseFunctions/AnalyticData/AnalyticData.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/BlastWave.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/BondiHoyleAccretion.hpp"
@@ -248,9 +250,10 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
           typename InterpolationTargetTags::vars_to_interpolate_to_target...>>>;
 
   using ordered_list_of_primitive_recovery_schemes = tmpl::list<
-      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::KastaunEtAl,
-      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::NewmanHamlin,
-      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::PalenzuelaEtAl>;
+      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::KastaunEtAl>;
+  //   ,
+  //   grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::NewmanHamlin,
+  //   grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::PalenzuelaEtAl>;
 
   using interpolation_target_tags = tmpl::list<InterpolationTargetTags...>;
 
@@ -695,6 +698,33 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
       tmpl::list<intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe,
                                                               KerrHorizon>>;
 
+  template <typename Metavariables>
+  using interpolating_component =
+      typename Metavariables::dg_element_array_component;
+};
+
+struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
+  using temporal_id = ::Tags::Time;
+  using surface_tags = tmpl::list<hydro::Tags::MassFlux<DataVector, 3>>;
+  using tags_to_observe =
+      tmpl::list<ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+          hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>>;
+  using vars_to_interpolate_to_target =
+      tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
+                 hydro::Tags::SpatialVelocity<DataVector, 3>,
+                 hydro::Tags::LorentzFactor<DataVector>,
+                 gr::Tags::Lapse<DataVector>, gr::Tags::Shift<DataVector, 3>,
+                 gr::Tags::SqrtDetSpatialMetric<DataVector>>;
+  using compute_items_on_target = tmpl::push_front<
+      tags_to_observe,
+      ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>>;
+  using compute_target_points =
+      intrp::TargetPoints::Sphere<Sphere, ::Frame::Inertial>;
+  using post_interpolation_callbacks = tmpl::list<
+      intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe, Sphere>,
+      intrp::callbacks::ObserveSurfaceData<surface_tags, Sphere,
+                                           ::Frame::Inertial>>;
   template <typename Metavariables>
   using interpolating_component =
       typename Metavariables::dg_element_array_component;
