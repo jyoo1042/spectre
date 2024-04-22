@@ -60,6 +60,23 @@ void check_bounds() {
         approx(hydro::units::geometric::default_baryon_mass));
 }
 
+template <bool IsRelativistic>
+void check_nonzero_bounds() {
+  const auto seed = std::random_device{}();
+  MAKE_GENERATOR(generator, seed);
+  CAPTURE(seed);
+  const auto adiabatic_index = 1.5;
+  CAPTURE(adiabatic_index);
+  auto distribution = std::uniform_real_distribution<>{1.e-9, 1.e-5};
+  auto min_temp = distribution(generator);
+  CAPTURE(min_temp);
+  const auto eos =
+      EquationsOfState::IdealFluid<IsRelativistic>{adiabatic_index, min_temp};
+  CHECK(min_temp == eos.temperature_lower_bound());
+  CHECK(min_temp / (adiabatic_index - 1) ==
+        eos.specific_internal_energy_lower_bound(1.0));
+}
+
 }  // namespace
 
 SPECTRE_TEST_CASE("Unit.PointwiseFunctions.EquationsOfState.IdealFluid",
@@ -99,29 +116,35 @@ SPECTRE_TEST_CASE("Unit.PointwiseFunctions.EquationsOfState.IdealFluid",
       TestHelpers::test_creation<
           std::unique_ptr<EoS::EquationOfState<true, 2>>>(
           {"IdealFluid:\n"
-           "  AdiabaticIndex: 1.6666666666666667\n"}),
+           "  AdiabaticIndex: 1.6666666666666667\n"
+           "  MinTemperature: 0.0\n"}),
       "IdealFluid", "ideal_fluid", d_for_size, 5.0 / 3.0);
   TestHelpers::EquationsOfState::check(
       TestHelpers::test_creation<
           std::unique_ptr<EoS::EquationOfState<true, 2>>>(
           {"IdealFluid:\n"
-           "  AdiabaticIndex: 1.3333333333333333\n"}),
+           "  AdiabaticIndex: 1.3333333333333333\n"
+           "  MinTemperature: 0.0\n"}),
       "IdealFluid", "ideal_fluid", dv_for_size, 4.0 / 3.0);
 
   TestHelpers::EquationsOfState::check(
       TestHelpers::test_creation<
           std::unique_ptr<EoS::EquationOfState<false, 2>>>(
           {"IdealFluid:\n"
-           "  AdiabaticIndex: 1.6666666666666667\n"}),
+           "  AdiabaticIndex: 1.6666666666666667\n"
+           "  MinTemperature: 0.0\n"}),
       "IdealFluid", "ideal_fluid", d_for_size, 5.0 / 3.0);
   TestHelpers::EquationsOfState::check(
       TestHelpers::test_creation<
           std::unique_ptr<EoS::EquationOfState<false, 2>>>(
           {"IdealFluid:\n"
-           "  AdiabaticIndex: 1.3333333333333333\n"}),
+           "  AdiabaticIndex: 1.3333333333333333\n"
+           "  MinTemperature: 0.0\n"}),
       "IdealFluid", "ideal_fluid", dv_for_size, 4.0 / 3.0);
 
   check_bounds<true>();
   check_bounds<false>();
+  check_nonzero_bounds<true>();
+  check_nonzero_bounds<false>();
   check_dominant_energy_condition_at_bound();
 }

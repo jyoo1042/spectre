@@ -55,6 +55,14 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
     static constexpr Options::String help = {"Adiabatic index gamma"};
   };
 
+  struct MinTemperature {
+    using type = double;
+    static type lower_bound() { return 0.0; }
+    static constexpr Options::String help = {
+        "Minimum temperature. "
+        "This value must not be greater than or equal to 0.0"};
+  };
+
   static constexpr Options::String help = {
       "An ideal fluid equation of state.\n"
       "The pressure is related to the rest mass density by p = rho * epsilon * "
@@ -63,7 +71,7 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
       "index.\n"
       "The temperature T is defined as T=epsilon."};
 
-  using options = tmpl::list<AdiabaticIndex>;
+  using options = tmpl::list<AdiabaticIndex, MinTemperature>;
 
   IdealFluid() = default;
   IdealFluid(const IdealFluid&) = default;
@@ -72,7 +80,7 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
   IdealFluid& operator=(IdealFluid&&) = default;
   ~IdealFluid() override = default;
 
-  explicit IdealFluid(double adiabatic_index);
+  explicit IdealFluid(double adiabatic_index, double min_temperature = 0.0);
 
   EQUATION_OF_STATE_FORWARD_DECLARE_MEMBERS(IdealFluid, 2)
 
@@ -104,9 +112,13 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
 
   /// The lower bound of the specific internal energy that is valid for this EOS
   /// at the given rest mass density \f$\rho\f$
+  /// If non-zero lower bound for temperature is provided, then the lower bound
+  /// for specific internal energy is also non-zero.
   double specific_internal_energy_lower_bound(
       const double /* rest_mass_density */) const override {
-    return 0.0;
+    return (min_temperature_ == 0.0)
+               ? 0.0
+               : (min_temperature_) / (adiabatic_index_ - 1.0);
   }
 
   /// The upper bound of the specific internal energy that is valid for this EOS
@@ -119,6 +131,11 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
     return IsRelativistic ? 1.0 : 0.0;
   }
 
+  /// The lower bound of the temperature that is valid for this EOS.
+  /// Non-zero lower bound could be set to impose floor for the specific
+  /// internal energy.
+  double temperature_lower_bound() const override { return min_temperature_; }
+
   /// The vacuum baryon mass for this EoS
   double baryon_mass() const override {
     return hydro::units::geometric::default_baryon_mass;
@@ -128,6 +145,7 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
   EQUATION_OF_STATE_FORWARD_DECLARE_MEMBER_IMPLS(2)
 
   double adiabatic_index_ = std::numeric_limits<double>::signaling_NaN();
+  double min_temperature_ = std::numeric_limits<double>::signaling_NaN();
 };
 
 /// \cond
