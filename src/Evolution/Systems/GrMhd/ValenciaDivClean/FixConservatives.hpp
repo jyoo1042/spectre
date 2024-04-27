@@ -199,10 +199,10 @@ class FixConservatives {
   using return_tags = tmpl::list<grmhd::ValenciaDivClean::Tags::TildeD,
                                  grmhd::ValenciaDivClean::Tags::TildeYe,
                                  grmhd::ValenciaDivClean::Tags::TildeTau,
-                                 grmhd::ValenciaDivClean::Tags::TildeS<>>;
+                                 grmhd::ValenciaDivClean::Tags::TildeS<>,
+                                 grmhd::ValenciaDivClean::Tags::TildeB<>>;
   using argument_tags =
-      tmpl::list<grmhd::ValenciaDivClean::Tags::TildeB<>,
-                 gr::Tags::SpatialMetric<DataVector, 3>,
+      tmpl::list<gr::Tags::SpatialMetric<DataVector, 3>,
                  gr::Tags::InverseSpatialMetric<DataVector, 3>,
                  gr::Tags::SqrtDetSpatialMetric<DataVector>>;
 
@@ -212,7 +212,7 @@ class FixConservatives {
       gsl::not_null<Scalar<DataVector>*> tilde_ye,
       gsl::not_null<Scalar<DataVector>*> tilde_tau,
       gsl::not_null<tnsr::i<DataVector, 3, Frame::Inertial>*> tilde_s,
-      const tnsr::I<DataVector, 3, Frame::Inertial>& tilde_b,
+      gsl::not_null<tnsr::I<DataVector, 3, Frame::Inertial>*> tilde_b,
       const tnsr::ii<DataVector, 3, Frame::Inertial>& spatial_metric,
       const tnsr::II<DataVector, 3, Frame::Inertial>& inv_spatial_metric,
       const Scalar<DataVector>& sqrt_det_spatial_metric) const;
