@@ -39,8 +39,8 @@ void FixConservativesAndComputePrims<OrderedListOfRecoverySchemes>::apply(
       make_not_null(&get<Tags::TildeYe>(*conserved_vars_ptr)),
       make_not_null(&get<Tags::TildeTau>(*conserved_vars_ptr)),
       make_not_null(&get<Tags::TildeS<Frame::Inertial>>(*conserved_vars_ptr)),
-      get<Tags::TildeB<Frame::Inertial>>(*conserved_vars_ptr), spatial_metric,
-      inv_spatial_metric, sqrt_det_spatial_metric);
+      make_not_null(&get<Tags::TildeB<Frame::Inertial>>(*conserved_vars_ptr)),
+      spatial_metric, inv_spatial_metric, sqrt_det_spatial_metric);
   grmhd::ValenciaDivClean::
       PrimitiveFromConservative<OrderedListOfRecoverySchemes, true>::apply(
           make_not_null(&get<hydro::Tags::RestMassDensity<DataVector>>(
