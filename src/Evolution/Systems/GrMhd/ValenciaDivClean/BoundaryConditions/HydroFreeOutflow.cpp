@@ -27,6 +27,7 @@
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
 #include "PointwiseFunctions/Hydro/LorentzFactor.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
+#include "Utilities/ErrorHandling/CaptureForError.hpp"
 #include "Utilities/Gsl.hpp"
 
 namespace grmhd::ValenciaDivClean::BoundaryConditions {
@@ -92,10 +93,12 @@ std::optional<std::string> HydroFreeOutflow::dg_ghost(
   //  * divergence cleaning field on ghost zone
   //  * spatial metric
   //  * sqrt determinant of spatial metric
+  //  * n_i beta^i
+  //  * u^i
   Variables<tmpl::list<
       ::Tags::TempScalar<0>, hydro::Tags::SpatialVelocity<DataVector, 3>,
       ::Tags::TempScalar<1>, gr::Tags::SpatialMetric<DataVector, 3>,
-      gr::Tags::SqrtDetSpatialMetric<DataVector>>>
+      gr::Tags::SqrtDetSpatialMetric<DataVector>, ::Tags::TempScalar<2>>>
       temp_buffer{number_of_grid_points};
   auto& normal_dot_interior_spatial_velocity =
       get<::Tags::TempScalar<0>>(temp_buffer);
@@ -107,6 +110,7 @@ std::optional<std::string> HydroFreeOutflow::dg_ghost(
       get<gr::Tags::SpatialMetric<DataVector, 3>>(temp_buffer);
   auto& interior_sqrt_det_spatial_metric =
       get<gr::Tags::SqrtDetSpatialMetric<DataVector>>(temp_buffer);
+  auto& normal_dot_interior_shift = get<::Tags::TempScalar<2>>(temp_buffer);
 
   get(*lapse) = get(interior_lapse);
   for (size_t i = 0; i < 3; ++i) {
@@ -131,8 +135,12 @@ std::optional<std::string> HydroFreeOutflow::dg_ghost(
   // kill ingoing normal component to zero
   dot_product(make_not_null(&normal_dot_interior_spatial_velocity),
               outward_directed_normal_covector, interior_spatial_velocity);
+  dot_product(make_not_null(&normal_dot_interior_shift),
+              outward_directed_normal_covector, interior_shift);
   for (size_t i = 0; i < number_of_grid_points; ++i) {
-    if (get(normal_dot_interior_spatial_velocity)[i] >= 0.0) {
+    if (get(normal_dot_interior_spatial_velocity)[i] -
+            (get(normal_dot_interior_shift)[i] / get(interior_lapse)[i]) >=
+        0.0) {
       for (size_t spatial_index = 0; spatial_index < 3; ++spatial_index) {
         exterior_spatial_velocity.get(spatial_index)[i] =
             interior_spatial_velocity.get(spatial_index)[i];
@@ -141,7 +149,8 @@ std::optional<std::string> HydroFreeOutflow::dg_ghost(
       for (size_t spatial_index = 0; spatial_index < 3; ++spatial_index) {
         exterior_spatial_velocity.get(spatial_index)[i] =
             interior_spatial_velocity.get(spatial_index)[i] -
-            get(normal_dot_interior_spatial_velocity)[i] *
+            (get(normal_dot_interior_spatial_velocity)[i] -
+             (get(normal_dot_interior_shift)[i] / get(interior_lapse)[i])) *
                 outward_directed_normal_vector.get(spatial_index)[i];
       }
     }
@@ -372,6 +381,10 @@ void HydroFreeOutflow::fd_ghost_impl(
     // to change the implementation below once subcell supports curved mesh.
     const auto normal_spatial_velocity_at_boundary =
         get_boundary_val(interior_spatial_velocity).get(dim_direction);
+    const auto alpha_at_boundary = get_boundary_val(interior_lapse);
+    const auto normal_beta_at_boundary =
+        get_boundary_val(interior_shift).get(dim_direction);
+
     for (size_t i = 0; i < 3; ++i) {
       if (i == dim_direction) {
         if (direction.sign() > 0.0) {
@@ -379,11 +392,22 @@ void HydroFreeOutflow::fd_ghost_impl(
               get(get_boundary_val(interior_lorentz_factor)) *
               max(normal_spatial_velocity_at_boundary,
                   normal_spatial_velocity_at_boundary * 0.0);
+          //   normal_beta_at_boundary / alpha_at_boundary);
         } else {
           get<LorentzFactorTimesSpatialVelocity>(outermost_prim_vars).get(i) =
               get(get_boundary_val(interior_lorentz_factor)) *
               min(normal_spatial_velocity_at_boundary,
                   normal_spatial_velocity_at_boundary * 0.0);
+          //   normal_beta_at_boundary / alpha_at_boundary);
+          CAPTURE_FOR_ERROR(normal_spatial_velocity_at_boundary);
+          CAPTURE_FOR_ERROR(alpha_at_boundary);
+          CAPTURE_FOR_ERROR(normal_beta_at_boundary);
+          for (size_t k = 0; k < normal_spatial_velocity_at_boundary.size();
+               k++) {
+            if (normal_spatial_velocity_at_boundary[k] > 0) {
+              ERROR("radial four vel > 0");
+            }
+          }
         }
       } else {
         get<LorentzFactorTimesSpatialVelocity>(outermost_prim_vars).get(i) =
