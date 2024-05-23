@@ -10,8 +10,8 @@
 {% block head %}
 {{ super() -}}
 #SBATCH --nodes {{ num_nodes | default(1) }}
-#SBATCH --ntasks-per-node 6
-#SBATCH --cpus-per-task 32
+#SBATCH --ntasks-per-node 1
+#SBATCH --cpus-per-task 96
 #SBATCH -p {{ queue | default("normal") }}
 #SBATCH -t {{ time_limit | default("1-00:00:00") }}
 {% endblock %}
