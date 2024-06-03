@@ -146,6 +146,10 @@ std::optional<std::string> HydroFreeOutflow::dg_ghost(
             interior_spatial_velocity.get(spatial_index)[i];
       }
     } else {
+      CAPTURE_FOR_ERROR(normal_dot_interior_spatial_velocity);
+      CAPTURE_FOR_ERROR(normal_dot_interior_shift);
+      CAPTURE_FOR_ERROR(interior_lapse);
+      ERROR("radial four vel > 0");
       for (size_t spatial_index = 0; spatial_index < 3; ++spatial_index) {
         exterior_spatial_velocity.get(spatial_index)[i] =
             interior_spatial_velocity.get(spatial_index)[i] -
@@ -392,13 +396,12 @@ void HydroFreeOutflow::fd_ghost_impl(
               get(get_boundary_val(interior_lorentz_factor)) *
               max(normal_spatial_velocity_at_boundary,
                   normal_spatial_velocity_at_boundary * 0.0);
-          //   normal_beta_at_boundary / alpha_at_boundary);
         } else {
           get<LorentzFactorTimesSpatialVelocity>(outermost_prim_vars).get(i) =
               get(get_boundary_val(interior_lorentz_factor)) *
               min(normal_spatial_velocity_at_boundary,
-                  normal_spatial_velocity_at_boundary * 0.0);
-          //   normal_beta_at_boundary / alpha_at_boundary);
+                  //   normal_spatial_velocity_at_boundary * 0.0);
+                  normal_beta_at_boundary / alpha_at_boundary);
           CAPTURE_FOR_ERROR(normal_spatial_velocity_at_boundary);
           CAPTURE_FOR_ERROR(alpha_at_boundary);
           CAPTURE_FOR_ERROR(normal_beta_at_boundary);
@@ -406,7 +409,7 @@ void HydroFreeOutflow::fd_ghost_impl(
                k++) {
             if (normal_spatial_velocity_at_boundary[k] -
                     (normal_beta_at_boundary[k] / alpha_at_boundary[k]) >
-                1e-10) {
+                0) {
               ERROR("radial four vel > 0");
             }
           }
