@@ -18,6 +18,10 @@
 using metavariables = EvolutionMetavars<tmpl::list<INTERPOLATION_TARGET>,
                                         USE_PARAMETRIZED_DELEPTONIZATION>;
 
+template void metavariables::run_deadlock_analysis_simple_actions(
+    Parallel::GlobalCache<EvolutionMetavars>& cache,
+    const std::vector<std::string>& deadlocked_components);
+
 extern "C" void CkRegisterMainModule() {
   Parallel::charmxx::register_main_module<metavariables>();
   Parallel::charmxx::register_init_node_and_proc(

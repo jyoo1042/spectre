@@ -13,6 +13,7 @@
 #include "Domain/Structure/DirectionMap.hpp"
 #include "Domain/Structure/Side.hpp"
 #include "Utilities/ErrorHandling/Assert.hpp"
+#include "Utilities/GenerateInstantiations.hpp"
 #include "Utilities/Gsl.hpp"
 #include "Utilities/MakeArray.hpp"
 
@@ -138,7 +139,9 @@ DirectionMap<Dim, DataVector> slice_data_impl(
                   subcell_extents);
       }
     }
-  } else {
+  }
+
+  else {
     // We add directions to `interpolated` to mark that we are interpolating
     // in this particular direction. The value of the bool is `true` _if_ we
     // did FD interpolation and `false` if DG interpolation should be
@@ -154,6 +157,14 @@ DirectionMap<Dim, DataVector> slice_data_impl(
         interpolated[directional_element_id.direction()] = false;
         continue;
       }
+      // unfortunately, fd_to_fd_neighbor_fd_interpolants contain
+      // for all direction where interpolation is necessary, whereas
+      // result currently only extends for directions that are not
+      // problematic FIXME:
+      if (!directions_to_slice.contains(directional_element_id.direction())) {
+        continue;
+      }
+
       interpolated[directional_element_id.direction()] = true;
       auto result_span =
           gsl::make_span(result.at(directional_element_id.direction()).data(),
@@ -196,16 +207,18 @@ DirectionMap<Dim, DataVector> slice_data_impl(
   return result;
 }
 
-template DirectionMap<1, DataVector> slice_data_impl(
-    const gsl::span<const double>&, const Index<1>&, const size_t,
-    const std::unordered_set<Direction<1>>&, size_t,
-    const DirectionalIdMap<1, std::optional<intrp::Irregular<1>>>&);
-template DirectionMap<2, DataVector> slice_data_impl(
-    const gsl::span<const double>&, const Index<2>&, const size_t,
-    const std::unordered_set<Direction<2>>&, size_t,
-    const DirectionalIdMap<2, std::optional<intrp::Irregular<2>>>&);
-template DirectionMap<3, DataVector> slice_data_impl(
-    const gsl::span<const double>&, const Index<3>&, const size_t,
-    const std::unordered_set<Direction<3>>&, size_t,
-    const DirectionalIdMap<3, std::optional<intrp::Irregular<3>>>&);
+// Explicit instantiations
+#define DIM(data) BOOST_PP_TUPLE_ELEM(0, data)
+
+#define INSTANTIATE(_, data)                                                 \
+  template DirectionMap<DIM(data), DataVector> slice_data_impl(              \
+      const gsl::span<const double>&, const Index<DIM(data)>&, const size_t, \
+      const std::unordered_set<Direction<DIM(data)>>&, size_t,               \
+      const DirectionalIdMap<DIM(data),                                      \
+                             std::optional<intrp::Irregular<DIM(data)>>>&);
+
+GENERATE_INSTANTIATIONS(INSTANTIATE, (1, 2, 3))
+
+#undef DIM
+#undef INSTANTIATE
 }  // namespace evolution::dg::subcell::detail
