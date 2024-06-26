@@ -100,7 +100,8 @@ struct SetSubcellGrid {
       subcell::Tags::ReconstructionOrder<Dim>,
       evolution::dg::subcell::Tags::InterpolatorsFromFdToNeighborFd<Dim>,
       evolution::dg::subcell::Tags::InterpolatorsFromDgToNeighborFd<Dim>,
-      evolution::dg::subcell::Tags::InterpolatorsFromNeighborDgToFd<Dim>>;
+      evolution::dg::subcell::Tags::InterpolatorsFromNeighborDgToFd<Dim>,
+      evolution::dg::subcell::Tags::ProblemoChest<Dim>>;
   using compute_tags =
       tmpl::list<Tags::MeshCompute<Dim>, Tags::LogicalCoordinatesCompute<Dim>,
                  ::domain::Tags::MappedCoordinates<

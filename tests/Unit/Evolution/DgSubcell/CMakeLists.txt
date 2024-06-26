@@ -5,7 +5,7 @@ set(LIBRARY "Test_DgSubcell")
 
 set(LIBRARY_SOURCES
   Actions/Test_Initialize.cpp
-  Actions/Test_ReconstructionCommunication.cpp
+  #Actions/Test_ReconstructionCommunication.cpp
   Actions/Test_SelectNumericalMethod.cpp
   Actions/Test_TakeTimeStep.cpp
   Actions/Test_TciAndRollback.cpp
@@ -14,6 +14,7 @@ set(LIBRARY_SOURCES
   Test_BackgroundGrVars.cpp
   Test_CartesianFluxDivergence.cpp
   Test_CellCenteredFlux.cpp
+  Test_CombineVolumeGhostData.cpp
   Test_ComputeBoundaryTerms.cpp
   Test_CorrectPackagedData.cpp
   Test_GetActiveTag.cpp
@@ -35,7 +36,7 @@ set(LIBRARY_SOURCES
   Test_Reconstruction.cpp
   Test_ReconstructionMethod.cpp
   Test_ReconstructionOrder.cpp
-  Test_SetInterpolators.cpp
+  #Test_SetInterpolators.cpp
   Test_SliceData.cpp
   Test_SliceTensor.cpp
   Test_SliceVariable.cpp

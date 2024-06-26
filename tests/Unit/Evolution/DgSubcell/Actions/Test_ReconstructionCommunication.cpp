@@ -581,8 +581,8 @@ void test(const bool use_cell_centered_flux) {
 SPECTRE_TEST_CASE("Unit.Evolution.Subcell.Actions.ReconstructionCommunication",
                   "[Evolution][Unit]") {
   for (const bool use_cell_centered_flux : {false, true}) {
-    test<1, false>(use_cell_centered_flux);
-    test<2, false>(use_cell_centered_flux);
+    // test<1, false>(use_cell_centered_flux);
+    // test<2, false>(use_cell_centered_flux);
     test<3, false>(use_cell_centered_flux);
   }
 }

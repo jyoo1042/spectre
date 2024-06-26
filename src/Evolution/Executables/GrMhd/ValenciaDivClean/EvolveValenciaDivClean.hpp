@@ -7,12 +7,14 @@
 #include <vector>
 
 #include "Domain/Creators/Factory3D.hpp"
+#include "Domain/FunctionsOfTime/OutputTimeBounds.hpp"
 #include "Domain/Tags.hpp"
 #include "Evolution/Actions/RunEventsAndDenseTriggers.hpp"
 #include "Evolution/Actions/RunEventsAndTriggers.hpp"
 #include "Evolution/ComputeTags.hpp"
 #include "Evolution/Conservative/UpdateConservatives.hpp"
 #include "Evolution/Conservative/UpdatePrimitives.hpp"
+#include "Evolution/Deadlock/PrintDgElementArray.hpp"
 #include "Evolution/DgSubcell/Actions/Initialize.hpp"
 #include "Evolution/DgSubcell/Actions/Labels.hpp"
 #include "Evolution/DgSubcell/Actions/ReconstructionCommunication.hpp"
@@ -478,6 +480,9 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
       evolution::dg::subcell::Actions::SendDataForReconstruction<
           volume_dim, grmhd::ValenciaDivClean::subcell::PrimitiveGhostVariables,
           local_time_stepping, use_dg_element_collection>,
+      evolution::dg::subcell::Actions::ReceiveAndSendDataForReconstruction<
+          volume_dim, grmhd::ValenciaDivClean::subcell::PrimitiveGhostVariables,
+          local_time_stepping, use_dg_element_collection>,
       evolution::dg::subcell::Actions::ReceiveDataForReconstruction<volume_dim>,
       Actions::Label<
           evolution::dg::subcell::Actions::Labels::BeginSubcellAfterDgRollback>,
@@ -609,6 +614,28 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
     using element_registrars =
         tmpl::map<tmpl::pair<dg_element_array_component, dg_registration_list>>;
   };
+
+  static void run_deadlock_analysis_simple_actions(
+      Parallel::GlobalCache<EvolutionMetavars>& cache,
+      const std::vector<std::string>& deadlocked_components) {
+    const auto& functions_of_time =
+        Parallel::get<::domain::Tags::FunctionsOfTime>(cache);
+
+    const std::string time_bounds =
+        ::domain::FunctionsOfTime::output_time_bounds(functions_of_time);
+
+    Parallel::printf("%s\n", time_bounds);
+
+    if constexpr (Parallel::is_dg_element_collection_v<
+                      dg_element_array_component>) {
+      Parallel::threaded_action<Parallel::Actions::SimpleActionOnElement<
+          deadlock::PrintElementInfo, true>>(
+          Parallel::get_parallel_component<dg_element_array_component>(cache));
+    } else {
+      Parallel::simple_action<deadlock::PrintElementInfo>(
+          Parallel::get_parallel_component<dg_element_array_component>(cache));
+    }
+  }
 
   using component_list = tmpl::list<
       observers::Observer<EvolutionMetavars>,

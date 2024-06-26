@@ -14,6 +14,7 @@
 #include "Domain/ElementMap.hpp"
 #include "Domain/Structure/BlockId.hpp"
 #include "Domain/Structure/Direction.hpp"
+#include "Domain/Structure/DirectionMap.hpp"
 #include "Domain/Structure/DirectionalId.hpp"
 #include "Domain/Structure/DirectionalIdMap.hpp"
 #include "Domain/Structure/Element.hpp"
@@ -28,6 +29,7 @@
 #include "Evolution/DgSubcell/Tags/SubcellOptions.hpp"
 #include "NumericalAlgorithms/Interpolation/IrregularInterpolant.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
+#include "Utilities/ErrorHandling/CaptureForError.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/Gsl.hpp"
 #include "Utilities/TMPL.hpp"
@@ -56,7 +58,8 @@ struct SetInterpolators {
   using return_tags = tmpl::list<
       evolution::dg::subcell::Tags::InterpolatorsFromFdToNeighborFd<Dim>,
       evolution::dg::subcell::Tags::InterpolatorsFromDgToNeighborFd<Dim>,
-      evolution::dg::subcell::Tags::InterpolatorsFromNeighborDgToFd<Dim>>;
+      evolution::dg::subcell::Tags::InterpolatorsFromNeighborDgToFd<Dim>,
+      evolution::dg::subcell::Tags::ProblemoChest<Dim>>;
   using argument_tags =
       tmpl::list<::domain::Tags::Element<Dim>, ::domain::Tags::Domain<Dim>,
                  domain::Tags::Mesh<Dim>, domain::Tags::Mesh<Dim>,
@@ -77,6 +80,9 @@ struct SetInterpolators {
       const gsl::not_null<
           DirectionalIdMap<Dim, std::optional<intrp::Irregular<Dim>>>*>
           interpolators_neighbor_dg_to_fd_ptr,
+      const gsl::not_null<
+          DirectionMap<Dim, interpolators_detail::ProblemoBook<Dim>>*>
+          problemo_book_ptr,
       const Element<Dim>& element, const Domain<Dim>& domain,
       const Mesh<Dim>& my_dg_mesh,
       // Needs to be updated to support non-uniform h/p-refinement
@@ -177,11 +183,68 @@ struct SetInterpolators {
             neighbor_logical_ghost_zone_coords = get_logical_coords(
                 element_map, neighbor_grid_ghost_zone_coords);
 
+        // Here I want to set up the conditional that checks the
+        // logical coordinates (in the element) of the neighbors ghost
+        // if they exceed past the extremal grid points of the element
+        // aka leading to extrapolation.
+        bool problemo = false;
+        Direction<Dim> direction_to_extend;
+
+        for (size_t i = 0; i < neighbor_logical_ghost_zone_coords[0].size();
+             ++i) {
+          for (size_t d = 0; d < Dim; ++d) {
+            double ext = 1 - (1 / my_fd_mesh.extents(d));
+            if (std::abs(neighbor_logical_ghost_zone_coords.get(d)[i]) > ext) {
+              problemo = true;
+              if ((neighbor_logical_ghost_zone_coords.get(d)[i]) > 0) {
+                direction_to_extend = Direction<Dim>{d, Side::Upper};
+              } else {
+                direction_to_extend = Direction<Dim>{d, Side::Lower};
+              }
+            }
+          }
+        }
+        if (problemo) {
+          auto new_neighbor_logical_ghost_zone_coords =
+              neighbor_logical_ghost_zone_coords;
+          auto new_basis = make_array<Dim>(my_fd_mesh.basis(0));
+          auto new_extents = make_array<Dim>(my_fd_mesh.extents(0));
+          auto new_quads = make_array<Dim>(my_fd_mesh.quadrature(0));
+          const size_t problematic_dim = direction_to_extend.dimension();
+          const double mf =
+              (my_fd_mesh.extents(problematic_dim)) /
+              (my_fd_mesh.extents(problematic_dim) + number_of_ghost_zones);
+          const double af =
+              (number_of_ghost_zones) /
+              (my_fd_mesh.extents(problematic_dim) + number_of_ghost_zones);
+          for (size_t d = 0; d < Dim; ++d) {
+            gsl::at(new_basis, d) = my_fd_mesh.basis(d);
+            gsl::at(new_quads, d) = my_fd_mesh.quadrature(d);
+            if (d == problematic_dim) {
+              gsl::at(new_extents, d) =
+                  my_fd_mesh.extents(d) + number_of_ghost_zones;
+              for (size_t i = 0;
+                   i < new_neighbor_logical_ghost_zone_coords[0].size(); ++i) {
+                new_neighbor_logical_ghost_zone_coords.get(d)[i] *= mf;
+                new_neighbor_logical_ghost_zone_coords.get(d)[i] -= af;
+              }
+            } else {
+              gsl::at(new_extents, d) = my_fd_mesh.extents(d);
+            }
+          }
+          const Mesh<Dim> new_mesh{new_extents, new_basis, new_quads};
+          (*interpolators_fd_to_neighbor_fd_ptr)[DirectionalId<Dim>{
+              direction, neighbor_id}] = intrp::Irregular<Dim>{
+              new_mesh, new_neighbor_logical_ghost_zone_coords};
+          (*problemo_book_ptr)[direction] =
+              interpolators_detail::ProblemoBook<Dim>{direction_to_extend};
+        } else {
+          (*interpolators_fd_to_neighbor_fd_ptr)[DirectionalId<Dim>{
+              direction, neighbor_id}] = intrp::Irregular<Dim>{
+              my_fd_mesh, neighbor_logical_ghost_zone_coords};
+        }
         // Set up interpolators for our local element to our neighbor's
         // ghost zones.
-        (*interpolators_fd_to_neighbor_fd_ptr)[DirectionalId<Dim>{
-            direction, neighbor_id}] = intrp::Irregular<Dim>{
-            my_fd_mesh, neighbor_logical_ghost_zone_coords};
         (*interpolators_dg_to_neighbor_fd_ptr)[DirectionalId<Dim>{
             direction, neighbor_id}] = intrp::Irregular<Dim>{
             my_dg_mesh, neighbor_logical_ghost_zone_coords};
