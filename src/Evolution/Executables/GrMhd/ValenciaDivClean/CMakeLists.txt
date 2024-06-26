@@ -5,6 +5,7 @@ set(LIBS_TO_LINK
   ApparentHorizonFinder
   Charmxx::main
   CoordinateMaps
+  Deadlock
   DgSubcell
   DiscontinuousGalerkin
   DomainCreators
