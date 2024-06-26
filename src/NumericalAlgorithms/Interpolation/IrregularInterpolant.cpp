@@ -14,6 +14,7 @@
 #include "NumericalAlgorithms/Spectral/LogicalCoordinates.hpp"
 #include "NumericalAlgorithms/Spectral/Mesh.hpp"
 #include "NumericalAlgorithms/Spectral/Spectral.hpp"
+#include "Utilities/ErrorHandling/CaptureForError.hpp"  //FIXME:
 
 namespace {
 
@@ -260,6 +261,7 @@ void Irregular<Dim>::interpolate(const gsl::not_null<DataVector*> result,
                                  const DataVector& input) const {
   const size_t m = interpolation_matrix_.rows();
   const size_t k = interpolation_matrix_.columns();
+  CAPTURE_FOR_ERROR(interpolation_matrix_);
   ASSERT(k == input.size(),
          "Number of points in 'input', "
              << input.size()

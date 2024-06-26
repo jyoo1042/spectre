@@ -14,6 +14,7 @@
 #include "Domain/Structure/DirectionalId.hpp"
 #include "Domain/Structure/DirectionalIdMap.hpp"
 #include "Domain/Structure/ElementId.hpp"
+#include "Evolution/DgSubcell/Tags/Interpolators.hpp"
 #include "NumericalAlgorithms/Interpolation/IrregularInterpolant.hpp"
 #include "Utilities/Gsl.hpp"
 
@@ -36,6 +37,7 @@ DirectionMap<Dim, DataVector> slice_data_impl(
     size_t additional_buffer,
     const DirectionalIdMap<Dim, std::optional<intrp::Irregular<Dim>>>&
         fd_to_neighbor_fd_interpolants);
+
 }  // namespace detail
 
 /// @{
@@ -88,5 +90,6 @@ DirectionMap<Dim, DataVector> slice_data(
                     directions_to_slice, additional_buffer,
                     fd_to_neighbor_fd_interpolants);
 }
+
 /// @}
 }  // namespace evolution::dg::subcell
