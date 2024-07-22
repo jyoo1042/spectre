@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <pup.h>
+#include <random>
 
 #include "DataStructures/DataVector.hpp"
 #include "DataStructures/Tensor/EagerMath/DotProduct.hpp"
@@ -140,6 +141,7 @@ FishboneMoncriefDisk::variables(
   variables_impl(vars, [&rest_mass_density, &specific_enthalpy, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(rest_mass_density), s) =
+        (1 / 76.69426) *
         get(equation_of_state_.rest_mass_density_from_enthalpy(
             Scalar<double>{get_element(get(specific_enthalpy), s)}));
   });
@@ -183,14 +185,18 @@ FishboneMoncriefDisk::variables(
     const tnsr::I<DataType, 3>& x,
     tmpl::list<hydro::Tags::Pressure<DataType>> /*meta*/,
     gsl::not_null<IntermediateVariables<DataType>*> vars) const {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<> dis(-0.02, 0.02);
   const auto rest_mass_density = get<hydro::Tags::RestMassDensity<DataType>>(
       variables(x, tmpl::list<hydro::Tags::RestMassDensity<DataType>>{}, vars));
   auto pressure = make_with_value<Scalar<DataType>>(x, 0.0);
-  variables_impl(vars, [&pressure, &rest_mass_density, this](
+  variables_impl(vars, [&pressure, &rest_mass_density, &gen, &dis, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(pressure), s) =
+        (1 / 76.69426) * (1 + dis(gen)) *
         get(equation_of_state_.pressure_from_density(
-            Scalar<double>{get_element(get(rest_mass_density), s)}));
+            Scalar<double>{76.69426 * get_element(get(rest_mass_density), s)}));
   });
   return {std::move(pressure)};
 }
@@ -208,7 +214,7 @@ FishboneMoncriefDisk::variables(
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(specific_internal_energy), s) =
         get(equation_of_state_.specific_internal_energy_from_density(
-            Scalar<double>{get_element(get(rest_mass_density), s)}));
+            Scalar<double>{76.69426 * get_element(get(rest_mass_density), s)}));
   });
   return {std::move(specific_internal_energy)};
 }
