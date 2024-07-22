@@ -213,10 +213,20 @@ class FishboneMoncriefDisk
         "The polytropic exponent of the fluid."};
     static type lower_bound() { return 1.; }
   };
+  /// The magnitude of noise added to pressure/energy of the Disk
+  /// to drive MRI.
+  struct Noise {
+    using type = double;
+    static constexpr Options::String help = {
+        "The magnitude of the white noise perturbation added to "
+        "pressure and energy to excite MRI in the disk."};
+    static type lower_bound() { return 0.; }
+    static type upper_bound() { return 1.; }
+  };
 
   using options =
       tmpl::list<BhMass, BhDimlessSpin, InnerEdgeRadius, MaxPressureRadius,
-                 PolytropicConstant, PolytropicExponent>;
+                 PolytropicConstant, PolytropicExponent, Noise>;
   static constexpr Options::String help = {
       "Fluid disk orbiting a Kerr black hole."};
 
@@ -230,7 +240,8 @@ class FishboneMoncriefDisk
 
   FishboneMoncriefDisk(double bh_mass, double bh_dimless_spin,
                        double inner_edge_radius, double max_pressure_radius,
-                       double polytropic_constant, double polytropic_exponent);
+                       double polytropic_constant, double polytropic_exponent,
+                       double noise);
 
   auto get_clone() const
       -> std::unique_ptr<evolution::initial_data::InitialData> override;
@@ -410,6 +421,8 @@ class FishboneMoncriefDisk
   double polytropic_constant_ = std::numeric_limits<double>::signaling_NaN();
   double polytropic_exponent_ = std::numeric_limits<double>::signaling_NaN();
   double angular_momentum_ = std::numeric_limits<double>::signaling_NaN();
+  double rho_max_ = std::numeric_limits<double>::signaling_NaN();
+  double noise_ = std::numeric_limits<double>::signaling_NaN();
   EquationsOfState::PolytropicFluid<true> equation_of_state_{};
   gr::Solutions::SphericalKerrSchild background_spacetime_{};
 };
