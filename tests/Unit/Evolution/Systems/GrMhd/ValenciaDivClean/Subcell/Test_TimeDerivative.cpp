@@ -473,6 +473,9 @@ std::array<double, 5> test(const size_t num_dg_pts,
           std::nullopt, fd_derivative_order, 1, 1, 1},
       typename evolution::dg::subcell::Tags::ReconstructionOrder<3>::type{});
 
+  auto inverse_jacobian = db::get<::domain::Tags::InverseJacobianCompute<
+      ::domain::Tags::ElementMap<3, Frame::Grid>,
+      ::domain::Tags::Coordinates<3, Frame::ElementLogical>>>(box);
   db::mutate_apply<ConservativeFromPrimitive>(make_not_null(&box));
 
   subcell::TimeDerivative::apply(make_not_null(&box));
@@ -541,11 +544,11 @@ SPECTRE_TEST_CASE(
   std::array<double, 5> second_order_error_6{};
   std::optional<double> dummy_expansion_velocity{};
   using DO = ::fd::DerivativeOrder;
-  // Note: All the high order cases are commented out because we don't yet
-  // have support for high-order FD on curved meshes.
-  for (const DO fd_do : {
-           DO::Two  // , DO::Four, DO::Six, DO::Eight, DO::Ten
-       }) {
+  // Note: This test case is successful for higher derivative orders as well,
+  // but including so many checks slows down the test case, resulting in
+  // timeouts. Since it is not explicitly necessary to test to highest order,
+  // we comment out these options.
+  for (const DO fd_do : {DO::Two, DO::Four, DO::Six /*, DO::Eight, DO::Ten*/}) {
     CAPTURE(fd_do);
     // This tests sets up a cube [2,3]^3 in a Bondi-Michel spacetime and
     // verifies that the time derivative vanishes. Or, more specifically, that
@@ -579,10 +582,9 @@ SPECTRE_TEST_CASE(
     // verifies that the time derivative is the same when using no mesh
     // velocity and when using a zero mesh velocity
     std::optional<double> zero_expansion_velocity(0.0);
-    const auto data_no_mesh_velocity = test(5, DO::Two,  // DO::Four,
-                                            dummy_expansion_velocity);
-    const auto data_mesh_velocity = test(5, DO::Two,  // DO::Four,
-                                         zero_expansion_velocity);
+    const auto data_no_mesh_velocity =
+        test(5, DO::Four, dummy_expansion_velocity);
+    const auto data_mesh_velocity = test(5, DO::Four, zero_expansion_velocity);
 
     for (size_t i = 0; i < data_no_mesh_velocity.size(); ++i) {
       CAPTURE(i);
@@ -594,9 +596,7 @@ SPECTRE_TEST_CASE(
   // Now use an expansion map.
   previous_error_5 = {};
   previous_error_6 = {};
-  for (const DO fd_do : {
-           DO::Two  // , DO::Four
-       }) {
+  for (const DO fd_do : {DO::Two, DO::Four}) {
     CAPTURE(fd_do);
     std::optional<double> expansion_velocity(0.1);
     // This tests sets up a cube [2,3]^3 in a Bondi-Michel spacetime and
