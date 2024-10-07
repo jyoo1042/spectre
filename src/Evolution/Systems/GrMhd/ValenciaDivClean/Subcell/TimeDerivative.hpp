@@ -82,6 +82,9 @@ struct TimeDerivative {
         "You will at least need to update the high-order boundary correction "
         "code to include the right normal vectors/Jacobians.");
 
+    std::array<tnsr::i<DataVector, 3, Frame::Inertial>, 3> lower_conormal;
+    std::array<tnsr::i<DataVector, 3, Frame::Inertial>, 3> upper_conormal;
+
     const Mesh<3>& subcell_mesh =
         db::get<evolution::dg::subcell::Tags::Mesh<3>>(*box);
     const Mesh<3>& dg_mesh = db::get<domain::Tags::Mesh<3>>(*box);
@@ -346,6 +349,12 @@ struct TimeDerivative {
                 reconstructed_num_pts, 0.0};
             for (size_t j = 0; j < 3; j++) {
               upper_outward_conormal.get(j) = -lower_outward_conormal.get(j);
+              gsl::at(upper_conormal, i).get(j) =
+                  upper_outward_conormal.get(j) *
+                  (get(normalization) / det_inv_jacobian_face);
+              gsl::at(lower_conormal, i).get(j) =
+                  lower_outward_conormal.get(j) *
+                  (get(normalization) / det_inv_jacobian_face);
             }
             // Note: we probably should compute the normal vector in addition to
             // the co-vector. Not a huge issue since we'll get an FPE right now
@@ -447,17 +456,6 @@ struct TimeDerivative {
           });
     }
 
-    if (UNLIKELY(fd_derivative_order != ::fd::DerivativeOrder::Two)) {
-      ERROR(
-          "We don't yet have high-order flux corrections for curved/moving "
-          "meshes and the implementation assumes curved/moving meshes. We need "
-          "to dot the Cartesian fluxes into the cell-centered "
-          "J inv(J)^{hat{i}}_j to get JF^{hat{i}} = J inv(J)^{hat{i}}_j F^j."
-          " Some care needs to be taken since we also get F^j from our "
-          "neighbors, which leaves the question as to whether to interpolate "
-          "the _inertial fluxes_ and then transform or whether to transform "
-          "and then interpolate the _densitized logical fluxes_.");
-    }
     std::optional<std::array<Variables<evolved_vars_tags>, 3>>
         high_order_corrections{};
     ::fd::cartesian_high_order_flux_corrections(
@@ -469,8 +467,8 @@ struct TimeDerivative {
         db::get<evolution::dg::subcell::Tags::GhostDataForReconstruction<3>>(
             *box),
         subcell_mesh, recons.ghost_zone_size(),
-        reconstruction_order.value_or(
-            std::array<gsl::span<std::uint8_t>, 3>{}));
+        reconstruction_order.value_or(std::array<gsl::span<std::uint8_t>, 3>{}),
+        false, lower_conormal, upper_conormal);
 
     const auto& cell_centered_det_inv_jacobian = db::get<
         evolution::dg::subcell::fd::Tags::DetInverseJacobianLogicalToInertial>(

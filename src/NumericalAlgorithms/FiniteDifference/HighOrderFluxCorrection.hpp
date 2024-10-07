@@ -28,6 +28,8 @@
 #include "Utilities/OptionalHelpers.hpp"
 #include "Utilities/TMPL.hpp"
 
+#include "Utilities/MakeWithValue.hpp"
+
 namespace fd {
 /// @{
 /*!
@@ -97,7 +99,16 @@ void cartesian_high_order_fluxes_using_nodes(
         ghost_cell_inertial_flux,
     const Mesh<Dim>& subcell_mesh, const size_t number_of_ghost_cells,
     [[maybe_unused]] const std::array<gsl::span<std::uint8_t>, Dim>&
-        reconstruction_order = {}) {
+        reconstruction_order = {},
+    [[maybe_unused]] const bool aligned_coordinates = true,
+    [[maybe_unused]] const std::array<tnsr::i<DataVector, Dim, Frame::Inertial>,
+                                      Dim>& lower_normal = {},
+    [[maybe_unused]] const std::array<tnsr::i<DataVector, Dim, Frame::Inertial>,
+                                      Dim>& upper_normal = {}) {
+  std::array<tnsr::i<DataVector, Dim, Frame::Inertial>, Dim> effective_normal =
+      make_with_value<std::array<tnsr::i<DataVector, Dim>, Dim>>(
+          cell_centered_inertial_flux, 0.0);
+
   using std::min;
   constexpr int max_correction_order = 10;
   static_assert(static_cast<int>(DerivOrder) <= max_correction_order);
@@ -116,11 +127,24 @@ void cartesian_high_order_fluxes_using_nodes(
                      [](const auto& t) { return not t.empty(); }) or
              static_cast<int>(DerivOrder) > 0,
          "For adaptive derivative orders the reconstruction_order must be set");
+  ASSERT(lower_normal[0].size() == upper_normal[0].size(),
+         "Array of upper and lower normal vectors must be the same size");
+  ASSERT(lower_normal[0][0].size() != 0 or aligned_coordinates,
+         "Normal vectors must be specified when coordinate systems are not "
+         "aligned");
   for (size_t dim = 0; dim < Dim; ++dim) {
     gsl::at(*high_order_boundary_corrections_in_logical_direction, dim)
         .initialize(
             gsl::at(second_order_boundary_corrections_in_logical_direction, dim)
                 .number_of_grid_points());
+    if (aligned_coordinates) {
+      effective_normal[dim].get(dim) = 1.0;
+    } else {
+      for (size_t i = 0; i < Dim; ++i) {
+        effective_normal[dim].get(i) =
+            0.5 * (lower_normal[dim].get(i) - upper_normal[dim].get(i));
+      }
+    }
   }
 
   // Reconstruction order is always first-varying fastest since we don't
@@ -133,7 +157,8 @@ void cartesian_high_order_fluxes_using_nodes(
                      number_of_ghost_cells,
                      &second_order_boundary_corrections_in_logical_direction,
                      &subcell_mesh, &correction_width, &reconstruction_order,
-                     &reconstruction_extents](auto tag_v, auto dim_v) {
+                     &reconstruction_extents, &effective_normal,
+                     &aligned_coordinates](auto tag_v, auto dim_v) {
     (void)reconstruction_extents;
     using tag = decltype(tag_v);
     constexpr size_t dim = decltype(dim_v)::value;
@@ -163,9 +188,17 @@ void cartesian_high_order_fluxes_using_nodes(
          ++storage_index) {
       const auto flux_multi_index = prepend(
           second_order_var_correction.get_tensor_index(storage_index), dim);
+      std::array<size_t, Dim> flux_storage_indices;
+      for (size_t n = 0; n < Dim; ++n) {
+        auto temp_multi_index = prepend(
+            second_order_var_correction.get_tensor_index(storage_index), n);
+        flux_storage_indices[n] =
+            FluxTensor::get_storage_index(temp_multi_index);
+      }
       const size_t flux_storage_index =
           FluxTensor::get_storage_index(flux_multi_index);
       // Loop over each face
+      auto current_normal = effective_normal[dim];
       for (size_t k = 0; k < (Dim == 3 ? subcell_face_extents[2] : 1); ++k) {
         for (size_t j = 0; j < (Dim >= 2 ? subcell_face_extents[1] : 1); ++j) {
           for (size_t i = 0; i < subcell_face_extents[0]; ++i) {
@@ -194,35 +227,85 @@ void cartesian_high_order_fluxes_using_nodes(
                     0.0;
 
             std::array<double, stencil_size> cell_centered_fluxes_for_stencil{};
+            std::array<double, stencil_size> zero_stencil{};
             // fill if we have to retrieve from lower neighbor
             size_t stencil_index = 0;
-            for (int grid_index = static_cast<int>(face_index[dim]) -
-                                  static_cast<int>(correction_width);
-                 grid_index < static_cast<int>(face_index[dim]) +
-                                  static_cast<int>(correction_width);
-                 ++grid_index, ++stencil_index) {
-              if (grid_index < 0) {
-                neighbor_index[dim] = static_cast<size_t>(
-                    static_cast<int>(number_of_ghost_cells) + grid_index);
-                gsl::at(cell_centered_fluxes_for_stencil, stencil_index) =
-                    lower_neighbor_cell_centered_flux[flux_storage_index]
-                                                     [collapsed_index(
-                                                         neighbor_index,
-                                                         neighbor_extents)];
-              } else if (grid_index >= static_cast<int>(subcell_extents[dim])) {
-                neighbor_index[dim] = static_cast<size_t>(
-                    grid_index - static_cast<int>(subcell_extents[dim]));
-                gsl::at(cell_centered_fluxes_for_stencil, stencil_index) =
-                    upper_neighbor_cell_centered_flux[flux_storage_index]
-                                                     [collapsed_index(
-                                                         neighbor_index,
-                                                         neighbor_extents)];
-              } else {
-                Index<Dim> volume_index = face_index;
-                volume_index[dim] = static_cast<size_t>(grid_index);
-                gsl::at(cell_centered_fluxes_for_stencil, stencil_index) =
-                    cell_centered_flux[flux_storage_index][collapsed_index(
-                        volume_index, subcell_extents)];
+            if (aligned_coordinates) {
+              for (int grid_index = static_cast<int>(face_index[dim]) -
+                                    static_cast<int>(correction_width);
+                   grid_index < static_cast<int>(face_index[dim]) +
+                                    static_cast<int>(correction_width);
+                   ++grid_index, ++stencil_index) {
+                gsl::at(zero_stencil, stencil_index) = 0.0;
+                if (grid_index < 0) {
+                  neighbor_index[dim] =
+                      number_of_ghost_cells + static_cast<size_t>(grid_index);
+                  gsl::at(cell_centered_fluxes_for_stencil, stencil_index) =
+                      lower_neighbor_cell_centered_flux[flux_storage_index]
+                                                       [collapsed_index(
+                                                           neighbor_index,
+                                                           neighbor_extents)];
+                } else if (grid_index >=
+                           static_cast<int>(subcell_extents[dim])) {
+                  neighbor_index[dim] = static_cast<size_t>(
+                      grid_index - static_cast<int>(subcell_extents[dim]));
+                  gsl::at(cell_centered_fluxes_for_stencil, stencil_index) =
+                      upper_neighbor_cell_centered_flux[flux_storage_index]
+                                                       [collapsed_index(
+                                                           neighbor_index,
+                                                           neighbor_extents)];
+                } else {
+                  Index<Dim> volume_index = face_index;
+                  // volume index[dim] changes to access cell- rather than
+                  // face-centered flux
+                  volume_index[dim] = static_cast<size_t>(grid_index);
+                  gsl::at(cell_centered_fluxes_for_stencil, stencil_index) =
+                      cell_centered_flux[flux_storage_index][collapsed_index(
+                          volume_index, subcell_extents)];
+                }
+              }
+              stencil_index = 0;
+            } else {
+              for (int grid_index = static_cast<int>(face_index[dim]) -
+                                    static_cast<int>(correction_width);
+                   grid_index < static_cast<int>(face_index[dim]) +
+                                    static_cast<int>(correction_width);
+                   ++grid_index, ++stencil_index) {
+                if (grid_index < 0) {
+                  neighbor_index[dim] =
+                      number_of_ghost_cells + static_cast<size_t>(grid_index);
+                  for (size_t n = 0; n < Dim; ++n) {
+                    gsl::at(cell_centered_fluxes_for_stencil, stencil_index) +=
+                        lower_neighbor_cell_centered_flux
+                            [flux_storage_indices[n]][collapsed_index(
+                                neighbor_index, neighbor_extents)] *
+                        current_normal.get(n)[collapsed_index(
+                            face_index, subcell_face_extents)];
+                  }
+                } else if (grid_index >=
+                           static_cast<int>(subcell_extents[dim])) {
+                  neighbor_index[dim] = static_cast<size_t>(
+                      grid_index - static_cast<int>(subcell_extents[dim]));
+                  for (size_t n = 0; n < Dim; ++n) {
+                    gsl::at(cell_centered_fluxes_for_stencil, stencil_index) +=
+                        upper_neighbor_cell_centered_flux
+                            [flux_storage_indices[n]][collapsed_index(
+                                neighbor_index, neighbor_extents)] *
+                        current_normal.get(n)[collapsed_index(
+                            face_index, subcell_face_extents)];
+                  }
+                } else {
+                  Index<Dim> volume_index = face_index;
+                  volume_index[dim] = static_cast<size_t>(grid_index);
+                  for (size_t n = 0; n < Dim; ++n) {
+                    gsl::at(cell_centered_fluxes_for_stencil, stencil_index) +=
+                        cell_centered_flux[flux_storage_indices[n]]
+                                          [collapsed_index(volume_index,
+                                                           subcell_extents)] *
+                        current_normal.get(n)[collapsed_index(
+                            face_index, subcell_face_extents)];
+                  }
+                }
               }
             }
 
@@ -383,7 +466,12 @@ void cartesian_high_order_fluxes_using_nodes(
     const Mesh<Dim>& subcell_mesh, const size_t number_of_ghost_cells,
     const DerivativeOrder derivative_order,
     [[maybe_unused]] const std::array<gsl::span<std::uint8_t>, Dim>&
-        reconstruction_order = {}) {
+        reconstruction_order = {},
+    [[maybe_unused]] const bool aligned_coordinates = true,
+    [[maybe_unused]] const std::array<tnsr::i<DataVector, Dim, Frame::Inertial>,
+                                      Dim>& lower_normal = {},
+    [[maybe_unused]] const std::array<tnsr::i<DataVector, Dim, Frame::Inertial>,
+                                      Dim>& upper_normal = {}) {
   switch (derivative_order) {
     case DerivativeOrder::OneHigherThanRecons:
       cartesian_high_order_fluxes_using_nodes<
@@ -391,7 +479,8 @@ void cartesian_high_order_fluxes_using_nodes(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     case DerivativeOrder::OneHigherThanReconsButFiveToFour:
       cartesian_high_order_fluxes_using_nodes<
@@ -399,42 +488,48 @@ void cartesian_high_order_fluxes_using_nodes(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     case DerivativeOrder::Two:
       cartesian_high_order_fluxes_using_nodes<DerivativeOrder::Two>(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     case DerivativeOrder::Four:
       cartesian_high_order_fluxes_using_nodes<DerivativeOrder::Four>(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     case DerivativeOrder::Six:
       cartesian_high_order_fluxes_using_nodes<DerivativeOrder::Six>(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     case DerivativeOrder::Eight:
       cartesian_high_order_fluxes_using_nodes<DerivativeOrder::Eight>(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     case DerivativeOrder::Ten:
       cartesian_high_order_fluxes_using_nodes<DerivativeOrder::Ten>(
           high_order_boundary_corrections_in_logical_direction,
           second_order_boundary_corrections_in_logical_direction,
           cell_centered_inertial_flux, ghost_cell_inertial_flux, subcell_mesh,
-          number_of_ghost_cells, reconstruction_order);
+          number_of_ghost_cells, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
       break;
     default:
       ERROR("Unsupported correction order " << derivative_order);
@@ -515,6 +610,11 @@ void cartesian_high_order_flux_corrections(
     const Mesh<Dim>& subcell_mesh, const size_t ghost_zone_size,
     [[maybe_unused]] const std::array<gsl::span<std::uint8_t>, Dim>&
         reconstruction_order = {},
+    [[maybe_unused]] const bool aligned_coordinates = true,
+    [[maybe_unused]] const std::array<tnsr::i<DataVector, Dim, Frame::Inertial>,
+                                      Dim>& lower_normal = {},
+    [[maybe_unused]] const std::array<tnsr::i<DataVector, Dim, Frame::Inertial>,
+                                      Dim>& upper_normal = {},
     const size_t number_of_rdmp_values_in_ghost_data = 0) {
   if (cell_centered_fluxes.has_value()) {
     ASSERT(alg::all_of(
@@ -550,7 +650,8 @@ void cartesian_high_order_flux_corrections(
           make_not_null(&(high_order_corrections->value())),
           second_order_boundary_corrections, cell_centered_fluxes.value(),
           flux_neighbor_data, subcell_mesh, ghost_zone_size,
-          fd_derivative_order, reconstruction_order);
+          fd_derivative_order, reconstruction_order, aligned_coordinates,
+          lower_normal, upper_normal);
     }
   }
 }
