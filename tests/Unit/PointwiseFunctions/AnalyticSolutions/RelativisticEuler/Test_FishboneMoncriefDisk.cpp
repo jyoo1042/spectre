@@ -85,9 +85,9 @@ void test_create_from_options() {
 }
 
 void test_move() {
-  RelativisticEuler::Solutions::FishboneMoncriefDisk disk(3.45, 0.23, 4.8, 8.6,
-                                                          0.02, 1.5, 0.0);
-  RelativisticEuler::Solutions::FishboneMoncriefDisk disk_copy(
+  const RelativisticEuler::Solutions::FishboneMoncriefDisk disk(
+      3.45, 0.23, 4.8, 8.6, 0.02, 1.5, 0.0);
+  const RelativisticEuler::Solutions::FishboneMoncriefDisk disk_copy(
       3.45, 0.23, 4.8, 8.6, 0.02, 1.5, 0.0);
   test_move_semantics(std::move(disk), disk_copy);  //  NOLINT
 }
@@ -108,9 +108,9 @@ void test_variables(const DataType& used_for_size) {
   const double polytropic_exponent = 4.0 / 3.0;
   const double noise = 0.0;
 
-  FishboneMoncriefDiskProxy disk(bh_mass, bh_dimless_spin, inner_edge_radius,
-                                 max_pressure_radius, polytropic_constant,
-                                 polytropic_exponent, noise);
+  const FishboneMoncriefDiskProxy disk(
+      bh_mass, bh_dimless_spin, inner_edge_radius, max_pressure_radius,
+      polytropic_constant, polytropic_exponent, noise);
   const auto member_variables = std::make_tuple(
       bh_mass, bh_dimless_spin, inner_edge_radius, max_pressure_radius,
       polytropic_constant, polytropic_exponent, noise);

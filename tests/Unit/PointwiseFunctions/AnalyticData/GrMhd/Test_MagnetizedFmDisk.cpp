@@ -97,16 +97,16 @@ void test_create_from_options() {
 }
 
 void test_move() {
-  grmhd::AnalyticData::MagnetizedFmDisk disk(3.51, 0.87, 7.43, 15.3, 42.67,
-                                             1.87, 0.0, 0.13, 0.015, 4);
-  grmhd::AnalyticData::MagnetizedFmDisk disk_copy(3.51, 0.87, 7.43, 15.3, 42.67,
-                                                  1.87, 0.0, 0.13, 0.015, 4);
+  const grmhd::AnalyticData::MagnetizedFmDisk disk(
+      3.51, 0.87, 7.43, 15.3, 42.67, 1.87, 0.0, 0.13, 0.015, 4);
+  const grmhd::AnalyticData::MagnetizedFmDisk disk_copy(
+      3.51, 0.87, 7.43, 15.3, 42.67, 1.87, 0.0, 0.13, 0.015, 4);
   test_move_semantics(std::move(disk), disk_copy);  //  NOLINT
 }
 
 void test_serialize() {
-  grmhd::AnalyticData::MagnetizedFmDisk disk(3.51, 0.87, 7.43, 15.3, 42.67,
-                                             1.87, 0.0, 0.13, 0.015, 4);
+  const grmhd::AnalyticData::MagnetizedFmDisk disk(
+      3.51, 0.87, 7.43, 15.3, 42.67, 1.87, 0.0, 0.13, 0.015, 4);
   test_serialization(disk);
 }
 
@@ -134,10 +134,10 @@ void test_variables(const DataType& used_for_size) {
   const double inverse_plasma_beta = 0.023;
   const size_t b_field_normalization = 51;  // Using lower than default
                                             //  resolution for faster testing.
-  MagnetizedFmDiskProxy disk(bh_mass, bh_dimless_spin, inner_edge_radius,
-                             max_pressure_radius, polytropic_constant,
-                             polytropic_exponent, noise, threshold_density,
-                             inverse_plasma_beta, b_field_normalization);
+  const MagnetizedFmDiskProxy disk(
+      bh_mass, bh_dimless_spin, inner_edge_radius, max_pressure_radius,
+      polytropic_constant, polytropic_exponent, noise, threshold_density,
+      inverse_plasma_beta, b_field_normalization);
   const auto member_variables = std::make_tuple(
       bh_mass, bh_dimless_spin, inner_edge_radius, max_pressure_radius,
       polytropic_constant, polytropic_exponent, noise, threshold_density,
