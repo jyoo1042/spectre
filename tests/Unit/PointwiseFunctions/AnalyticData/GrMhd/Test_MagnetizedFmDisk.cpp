@@ -97,8 +97,8 @@ void test_create_from_options() {
 }
 
 void test_move() {
-  const grmhd::AnalyticData::MagnetizedFmDisk disk(
-      3.51, 0.87, 7.43, 15.3, 42.67, 1.87, 0.0, 0.13, 0.015, 4);
+  grmhd::AnalyticData::MagnetizedFmDisk disk(3.51, 0.87, 7.43, 15.3, 42.67,
+                                             1.87, 0.0, 0.13, 0.015, 4);
   const grmhd::AnalyticData::MagnetizedFmDisk disk_copy(
       3.51, 0.87, 7.43, 15.3, 42.67, 1.87, 0.0, 0.13, 0.015, 4);
   test_move_semantics(std::move(disk), disk_copy);  //  NOLINT
@@ -112,17 +112,6 @@ void test_serialize() {
 
 template <typename DataType>
 void test_variables(const DataType& used_for_size) {
-//   const double bh_mass = 1.;
-//   const double bh_dimless_spin = 0.9375;
-//   const double inner_edge_radius = 6.;
-//   const double max_pressure_radius = 12.;
-//   const double polytropic_constant = 0.001;
-//   const double polytropic_exponent = 1.3333333333333333333333;
-//   const double noise = 0.0;
-//   const double threshold_density = 0.02;
-//   const double inverse_plasma_beta = 0.023;
-
-
   const double bh_mass = 1.23;
   const double bh_dimless_spin = 0.97;
   const double inner_edge_radius = 6.2;

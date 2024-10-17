@@ -85,8 +85,8 @@ void test_create_from_options() {
 }
 
 void test_move() {
-  const RelativisticEuler::Solutions::FishboneMoncriefDisk disk(
-      3.45, 0.23, 4.8, 8.6, 0.02, 1.5, 0.0);
+  RelativisticEuler::Solutions::FishboneMoncriefDisk disk(3.45, 0.23, 4.8, 8.6,
+                                                          0.02, 1.5, 0.0);
   const RelativisticEuler::Solutions::FishboneMoncriefDisk disk_copy(
       3.45, 0.23, 4.8, 8.6, 0.02, 1.5, 0.0);
   test_move_semantics(std::move(disk), disk_copy);  //  NOLINT
