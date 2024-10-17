@@ -165,8 +165,8 @@ template <typename DataType>
 void test_sin_theta_squared(const DataType& used_for_size) {
   // Numbers below reproduce the initial data the bug was spotted with,
   // along with the points where the FPEs were found.
-  FishboneMoncriefDiskProxy disk(1.0, 0.9375, 6.0, 12.0, 0.001,
-                                 1.3333333333333333333333, 0.0);
+  const FishboneMoncriefDiskProxy disk(1.0, 0.9375, 6.0, 12.0, 0.001,
+                                       1.3333333333333333333333, 0.0);
   using variables_tags =
       FishboneMoncriefDiskProxy::grmhd_variables_tags<DataType>;
   auto coords = make_with_value<tnsr::I<DataType, 3>>(used_for_size, 0.0);

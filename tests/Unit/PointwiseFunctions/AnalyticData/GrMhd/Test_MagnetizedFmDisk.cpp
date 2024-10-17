@@ -175,10 +175,10 @@ void test_variables(const DataType& used_for_size) {
 
   // Check that when InversePlasmaBeta = 0, magnetic field vanishes and
   // we recover FishboneMoncriefDisk
-  MagnetizedFmDiskProxy another_disk(bh_mass, bh_dimless_spin,
-                                     inner_edge_radius, max_pressure_radius,
-                                     polytropic_constant, polytropic_exponent,
-                                     noise, threshold_density, 0.0, 4);
+  const MagnetizedFmDiskProxy another_disk(
+      bh_mass, bh_dimless_spin, inner_edge_radius, max_pressure_radius,
+      polytropic_constant, polytropic_exponent, noise, threshold_density, 0.0,
+      4);
 
   pypp::check_with_random_values<1>(
       &MagnetizedFmDiskProxy::hydro_variables<DataType>, another_disk,
@@ -204,12 +204,12 @@ SPECTRE_TEST_CASE("Unit.PointwiseFunctions.AnalyticData.GrMhd.MagFmDisk",
                   "[Unit][PointwiseFunctions]") {
   pypp::SetupLocalPythonEnvironment local_python_env{""};
 
-//   test_create_from_options();
-//   test_serialize();
-//   test_move();
+  test_create_from_options();
+  test_serialize();
+  test_move();
 
   test_variables(std::numeric_limits<double>::signaling_NaN());
-//   test_variables(DataVector(5));
+  test_variables(DataVector(5));
 
 #ifdef SPECTRE_DEBUG
   CHECK_THROWS_WITH(
