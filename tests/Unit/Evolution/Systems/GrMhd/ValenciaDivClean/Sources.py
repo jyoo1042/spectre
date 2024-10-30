@@ -171,6 +171,14 @@ def source_tilde_b(
     )
 
 
+""" tilde_phi * np.einsum(
+        "a, ia", d_lapse, inv_spatial_metric
+    ) + lapse * tilde_phi * (
+        0.5 * np.einsum("ia, a", inv_spatial_metric, term_one)
+        - np.einsum("ia, a", inv_spatial_metric, term_two)
+    )"""
+
+
 def source_tilde_phi(
     tilde_d,
     tilde_ye,
