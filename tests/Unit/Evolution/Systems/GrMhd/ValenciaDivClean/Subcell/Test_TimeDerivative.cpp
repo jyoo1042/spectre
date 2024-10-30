@@ -470,7 +470,10 @@ std::array<double, 5> test(const size_t num_dg_pts,
           evolution::dg::subcell::fd::ReconstructionMethod::DimByDim, false,
           std::nullopt, fd_derivative_order, 1, 1, 1},
       typename evolution::dg::subcell::Tags::ReconstructionOrder<3>::type{});
-
+  auto inverse_jacobian = db::get<::domain::Tags::InverseJacobianCompute<
+              ::domain::Tags::ElementMap<3, Frame::Grid>,
+              ::domain::Tags::Coordinates<3, Frame::ElementLogical>>>(box);
+  //  Parallel::printf("\nInverse_jacobian_test\n%s\n", inverse_jacobian);
   db::mutate_apply<ConservativeFromPrimitive>(make_not_null(&box));
 
   subcell::TimeDerivative::apply(make_not_null(&box));
@@ -518,7 +521,6 @@ std::array<double, 5> test(const size_t num_dg_pts,
           }
         }
       });
-
   return {
       {max(abs(get(get<Tags::TildeD>(output_minus_expected_dt_cons_vars)))),
        max(abs(get(get<Tags::TildeYe>(output_minus_expected_dt_cons_vars)))),
@@ -542,13 +544,14 @@ SPECTRE_TEST_CASE(
   // Note: All the high order cases are commented out because we don't yet
   // have support for high-order FD on curved meshes.
   for (const DO fd_do : {
-           DO::Two  // , DO::Four, DO::Six, DO::Eight, DO::Ten
+      DO::Two, DO::Four//, DO::Six, DO::Eight, DO::Ten
        }) {
     CAPTURE(fd_do);
     // This tests sets up a cube [2,3]^3 in a Bondi-Michel spacetime and
     // verifies that the time derivative vanishes. Or, more specifically, that
     // the time derivative decreases with increasing resolution.
     const auto five_pts_data = test(5, fd_do, dummy_expansion_velocity);
+    Parallel::printf("\nfive point data\n%s\n", five_pts_data);
     const auto six_pts_data = test(6, fd_do, dummy_expansion_velocity);
     if (fd_do == DO::Two) {
       second_order_error_5 = five_pts_data;
@@ -577,9 +580,9 @@ SPECTRE_TEST_CASE(
     // verifies that the time derivative is the same when using no mesh
     // velocity and when using a zero mesh velocity
     std::optional<double> zero_expansion_velocity(0.0);
-    const auto data_no_mesh_velocity = test(5, DO::Two,  // DO::Four,
+    const auto data_no_mesh_velocity = test(5, DO::Four,  // DO::Two,
                                             dummy_expansion_velocity);
-    const auto data_mesh_velocity = test(5, DO::Two,  // DO::Four,
+    const auto data_mesh_velocity = test(5, DO::Four,  // DO::Two,
                                          zero_expansion_velocity);
 
     for (size_t i = 0; i < data_no_mesh_velocity.size(); ++i) {
@@ -593,7 +596,7 @@ SPECTRE_TEST_CASE(
   previous_error_5 = {};
   previous_error_6 = {};
   for (const DO fd_do : {
-           DO::Two  // , DO::Four
+      DO::Two, DO::Four// DO::Six
        }) {
     CAPTURE(fd_do);
     std::optional<double> expansion_velocity(0.1);
@@ -623,21 +626,21 @@ SPECTRE_TEST_CASE(
     previous_error_5 = five_pts_data;
     previous_error_6 = six_pts_data;
   }
-
+  /*
   // Check the adaptive correction order works.
-  // for (const auto& recon_order : make_array(
-  //          DO::OneHigherThanRecons, DO::OneHigherThanReconsButFiveToFour)) {
-  //   CAPTURE(recon_order);
-  //   const auto five_pts_data = test(5, recon_order,
-  //   dummy_expansion_velocity); const auto six_pts_data = test(6, recon_order,
-  //   dummy_expansion_velocity); for (size_t i = 0; i < five_pts_data.size();
-  //   ++i) {
-  //     CAPTURE(i);
-  //     CHECK(gsl::at(six_pts_data, i) < gsl::at(five_pts_data, i));
-  //     CHECK(gsl::at(five_pts_data, i) < gsl::at(second_order_error_5, i));
-  //     CHECK(gsl::at(six_pts_data, i) < gsl::at(second_order_error_6, i));
-  //   }
-  // }
+ for (const auto& recon_order : make_array(
+          DO::OneHigherThanRecons, DO::OneHigherThanReconsButFiveToFour)) {
+   CAPTURE(recon_order);
+   const auto five_pts_data = test(5, recon_order,
+   dummy_expansion_velocity); const auto six_pts_data = test(6, recon_order,
+   dummy_expansion_velocity); for (size_t i = 0; i < five_pts_data.size();
+   ++i) {
+     CAPTURE(i);
+     CHECK(gsl::at(six_pts_data, i) < gsl::at(five_pts_data, i));
+     CHECK(gsl::at(five_pts_data, i) < gsl::at(second_order_error_5, i));
+     CHECK(gsl::at(six_pts_data, i) < gsl::at(second_order_error_6, i));
+   }
+ }*/
 }
 }  // namespace
 }  // namespace grmhd::ValenciaDivClean
