@@ -37,8 +37,25 @@ namespace hydro {
  * $1/\sqrt{4\pi}$, following \cite Moesta2013dna .
  */
 template <typename DataType>
+void comoving_magnetic_field(
+    gsl::not_null<tnsr::A<DataType, 3>*> result,
+    const tnsr::I<DataType, 3>& spatial_velocity,
+    const tnsr::I<DataType, 3>& magnetic_field,
+    const Scalar<DataType>& magnetic_field_dot_spatial_velocity,
+    const Scalar<DataType>& lorentz_factor, const tnsr::I<DataType, 3>& shift,
+    const Scalar<DataType>& lapse);
+
+template <typename DataType>
+tnsr::A<DataType, 3> comoving_magnetic_field(
+    const tnsr::I<DataType, 3>& spatial_velocity,
+    const tnsr::I<DataType, 3>& magnetic_field,
+    const Scalar<DataType>& magnetic_field_dot_spatial_velocity,
+    const Scalar<DataType>& lorentz_factor, const tnsr::I<DataType, 3>& shift,
+    const Scalar<DataType>& lapse);
+
+template <typename DataType>
 void comoving_magnetic_field_one_form(
-    const gsl::not_null<tnsr::a<DataType, 3>*> result,
+    gsl::not_null<tnsr::a<DataType, 3>*> result,
     const tnsr::i<DataType, 3>& spatial_velocity_one_form,
     const tnsr::i<DataType, 3>& magnetic_field_one_form,
     const Scalar<DataType>& magnetic_field_dot_spatial_velocity,
@@ -55,7 +72,7 @@ tnsr::a<DataType, 3> comoving_magnetic_field_one_form(
 
 template <typename DataType>
 void comoving_magnetic_field_squared(
-    const gsl::not_null<Scalar<DataType>*> result,
+    gsl::not_null<Scalar<DataType>*> result,
     const Scalar<DataType>& magnetic_field_squared,
     const Scalar<DataType>& magnetic_field_dot_spatial_velocity,
     const Scalar<DataType>& lorentz_factor);
