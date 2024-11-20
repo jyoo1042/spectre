@@ -11,6 +11,7 @@
 #include "Utilities/GenerateInstantiations.hpp"
 #include "Utilities/Serialization/PupStlCpp17.hpp"
 
+#include "Utilities/ErrorHandling/CaptureForError.hpp"
 
 namespace VariableFixing {
 
@@ -158,6 +159,8 @@ void FixToAtmosphere<Dim>::operator()(
       }
     }
     if (magnetization_bound_.has_value() and plasma_beta_bound_.has_value()) {
+      const double sigma_bound = magnetization_bound_.value();
+      const double beta_bound = plasma_beta_bound_.value();
       double magnetic_field_squared = 0.0;
       double magnetic_field_dot_v = 0.0;
 
@@ -176,10 +179,16 @@ void FixToAtmosphere<Dim>::operator()(
       double comoving_magnetic_field_squared =
           (magnetic_field_squared / (square(get(*lorentz_factor)[i]))) +
           square(magnetic_field_dot_v);
-      high_magnetiziation_treatment(rest_mass_density, specific_internal_energy,
-                                    temperature, pressure, electron_fraction,
-                                    comoving_magnetic_field_squared,
-                                    equation_of_state, i);
+      if (get(*rest_mass_density)[i] <
+              comoving_magnetic_field_squared / sigma_bound or
+          get(*pressure)[i] <
+              comoving_magnetic_field_squared / (2.0 * beta_bound)) {
+        high_magnetiziation_treatment(
+            rest_mass_density, specific_internal_energy, temperature, pressure,
+            spatial_velocity, lorentz_factor, electron_fraction, magnetic_field,
+            spatial_metric, comoving_magnetic_field_squared,
+            magnetic_field_squared, magnetic_field_dot_v, equation_of_state, i);
+      }
     }
   }
 }
@@ -273,16 +282,28 @@ void FixToAtmosphere<Dim>::high_magnetiziation_treatment(
     const gsl::not_null<Scalar<DataVector>*> specific_internal_energy,
     const gsl::not_null<Scalar<DataVector>*> temperature,
     const gsl::not_null<Scalar<DataVector>*> pressure,
+    const gsl::not_null<tnsr::I<DataVector, Dim, Frame::Inertial>*>
+        spatial_velocity,
+    const gsl::not_null<Scalar<DataVector>*> lorentz_factor,
     const Scalar<DataVector>& electron_fraction,
+    const tnsr::I<DataVector, Dim, Frame::Inertial>& magnetic_field,
+    const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
     const double comoving_magnetic_field_squared,
+    const double magnetic_field_squared, const double magnetic_field_dot_v,
     const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
         equation_of_state,
-    const size_t grid_index) const {
+    size_t grid_index) const {
   using std::max;
   using std::min;
   const double sigma_bound = magnetization_bound_.value();
   const double beta_bound = plasma_beta_bound_.value();
-
+  // old rest mass density * specific enthalpy before we
+  // apply flooring on rest mass density, pressure, and specific internal
+  // energy based on magnetic field strength.
+  const double old_wg = get(*rest_mass_density)[grid_index] +
+                        get(*rest_mass_density)[grid_index] *
+                            get(*specific_internal_energy)[grid_index] +
+                        get(*pressure)[grid_index];
   // Increment rest_mass_density and temperature until magnetization and beta
   // are bounded above by some prescribed values. this is so that we are not in
   // extremly high magnetized regions in our simulation which could lead to
@@ -293,7 +314,7 @@ void FixToAtmosphere<Dim>::high_magnetiziation_treatment(
           comoving_magnetic_field_squared / sigma_bound);
   get(*pressure)[grid_index] =
       max(get(*pressure)[grid_index],
-          comoving_magnetic_field_squared / (2 * beta_bound));
+          comoving_magnetic_field_squared / (2.0 * beta_bound));
 
   const Scalar<double> updated_density{get(*rest_mass_density)[grid_index]};
   // Since all the EoS functions take either temperature or
@@ -343,6 +364,102 @@ void FixToAtmosphere<Dim>::high_magnetiziation_treatment(
                         Scalar<double>{get(electron_fraction)[grid_index]}));
       }
     }
+  }
+
+  // With changes in rest mass density, pressure, and specific internal energy,
+  // enthalpy is changed. In order to preserve fluid momentum, parallel to
+  // to magnetic field, we need to decrease the parallel component of spatial
+  // velocity. To do this, we follow the so called "drift-frame flooring".
+
+  double velocity_squared = 0.0;
+  for (size_t j = 0; j < Dim; ++j) {
+    velocity_squared += spatial_velocity->get(j)[grid_index] *
+                        spatial_velocity->get(j)[grid_index] *
+                        spatial_metric.get(j, j)[grid_index];
+    for (size_t k = j + 1; k < Dim; ++k) {
+      velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
+                          spatial_velocity->get(k)[grid_index] *
+                          spatial_metric.get(j, k)[grid_index];
+    }
+  }
+  // compute new rho * h
+  const double new_wg = get(*rest_mass_density)[grid_index] +
+                        get(*rest_mass_density)[grid_index] *
+                            get(*specific_internal_energy)[grid_index] +
+                        get(*pressure)[grid_index];
+  CAPTURE_FOR_ERROR(velocity_squared);
+  // We only need to do this if non-zero velocity and if rest mass density
+  // times specific enthalpy has been increased.
+  // The latter should be always true the way that we applied flooring but
+  // we do this for sanity check.
+
+  if (velocity_squared > 1.e-15 && new_wg > old_wg) {
+    const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
+    const double v_parallel = magnetic_field_dot_v / magnetic_field_magnitude;
+    const double lorentz_factor_v = get(*lorentz_factor)[grid_index];
+    const double lorentz_factor_perp =
+        1.0 / sqrt(square(v_parallel) + (1.0 / (square(lorentz_factor_v))));
+
+    CAPTURE_FOR_ERROR(magnetic_field_magnitude);
+    CAPTURE_FOR_ERROR(v_parallel);
+    CAPTURE_FOR_ERROR(lorentz_factor_v);
+    CAPTURE_FOR_ERROR(lorentz_factor_perp);
+    // if (lorentz_factor_perp > lorentz_factor_v) {
+    //   ERROR(
+    //       "lorentz factor of perpendicular-only velocity is bigger "
+    //       "than that of total velocity!");
+    // }
+    // rest_mass_density time specific_enthalpy
+    const double rho_h = get(*rest_mass_density)[grid_index] +
+                         get(*pressure)[grid_index] +
+                         get(*specific_internal_energy)[grid_index];
+
+    const double x =
+        (2 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
+        (old_wg / new_wg);
+
+    CAPTURE_FOR_ERROR(magnetic_field_dot_v);
+    CAPTURE_FOR_ERROR(rho_h);
+    CAPTURE_FOR_ERROR(x);
+
+    const double new_v_parallel =
+        (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
+    CAPTURE_FOR_ERROR(new_v_parallel);
+
+    if (abs(new_v_parallel) > abs(v_parallel)) {
+      ERROR(
+          "the parallel component of the velocity is increased "
+          "instead of being reduced!!");
+    }
+
+    // readjust the spatial velocity
+    for (size_t j = 0; j < Dim; ++j) {
+      spatial_velocity->get(j)[grid_index] +=
+          (new_v_parallel - v_parallel) * magnetic_field.get(j)[grid_index] /
+          magnetic_field_magnitude;
+    }
+
+    double new_velocity_squared = 0.0;
+    for (size_t j = 0; j < Dim; ++j) {
+      new_velocity_squared += spatial_velocity->get(j)[grid_index] *
+                              spatial_velocity->get(j)[grid_index] *
+                              spatial_metric.get(j, j)[grid_index];
+      for (size_t k = j + 1; k < Dim; ++k) {
+        new_velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
+                                spatial_velocity->get(k)[grid_index] *
+                                spatial_metric.get(j, k)[grid_index];
+      }
+    }
+    CAPTURE_FOR_ERROR(new_velocity_squared);
+    // readjust the loretnz_factor
+    get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
+    const double new_lorentz_factor = get(*lorentz_factor)[grid_index];
+    CAPTURE_FOR_ERROR(new_lorentz_factor);
+    // if (new_lorentz_factor > lorentz_factor_v) {
+    //   ERROR(
+    //       "the lorentz factor new velocityis increased "
+    //       "instead of being reduced!!");
+    // }
   }
 }
 
