@@ -16,8 +16,10 @@ spectre_target_sources(
   MagneticRotor.cpp
   MagnetizedFmDisk.cpp
   MagnetizedTovStar.cpp
+  Nada.cpp
   OrszagTangVortex.cpp
   PolarMagnetizedFmDisk.cpp
+  PolarNada.cpp
   RiemannProblem.cpp
   SlabJet.cpp
   SphericalTorus.cpp
@@ -37,7 +39,9 @@ spectre_target_headers(
   MagnetizedFmDisk.hpp
   MagnetizedTovStar.hpp
   OrszagTangVortex.hpp
+  Nada.hpp
   PolarMagnetizedFmDisk.hpp
+  PolarNada.hpp
   RiemannProblem.hpp
   SlabJet.hpp
   SphericalTorus.hpp
