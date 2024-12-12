@@ -137,6 +137,7 @@
 #include "ParallelAlgorithms/Interpolation/Tags.hpp"
 #include "ParallelAlgorithms/Interpolation/Targets/KerrHorizon.hpp"
 #include "ParallelAlgorithms/Interpolation/Targets/SpecifiedPoints.hpp"
+#include "ParallelAlgorithms/Interpolation/Targets/Sphere.hpp"
 #include "PointwiseFunctions/AnalyticData/AnalyticData.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/BlastWave.hpp"
 #include "PointwiseFunctions/AnalyticData/GrMhd/BondiHoyleAccretion.hpp"
@@ -722,6 +723,31 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using post_interpolation_callbacks =
       tmpl::list<intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe,
                                                               KerrHorizon>>;
+
+  template <typename Metavariables>
+  using interpolating_component =
+      typename Metavariables::dg_element_array_component;
+};
+
+struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
+  using temporal_id = ::Tags::Time;
+  using tags_to_observe =
+      tmpl::list<ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+          hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>>;
+  using vars_to_interpolate_to_target =
+      tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
+                 hydro::Tags::SpatialVelocity<DataVector, 3>,
+                 hydro::Tags::LorentzFactor<DataVector>,
+                 gr::Tags::Lapse<DataVector>, gr::Tags::Shift<DataVector, 3>,
+                 gr::Tags::SqrtDetSpatialMetric<DataVector>>;
+  using compute_items_on_target = tmpl::push_front<
+      tags_to_observe,
+      ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>>;
+  using compute_target_points =
+      intrp::TargetPoints::Sphere<Sphere, ::Frame::Inertial>;
+  using post_interpolation_callbacks = tmpl::list<
+      intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe, Sphere>>;
 
   template <typename Metavariables>
   using interpolating_component =
