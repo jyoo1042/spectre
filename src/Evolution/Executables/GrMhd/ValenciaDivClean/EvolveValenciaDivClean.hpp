@@ -164,6 +164,7 @@
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
 #include "PointwiseFunctions/Hydro/InversePlasmaBeta.hpp"
+#include "PointwiseFunctions/Hydro/MagneticFlux.hpp"
 #include "PointwiseFunctions/Hydro/MassFlux.hpp"
 #include "PointwiseFunctions/Hydro/QuadrupoleFormula.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
@@ -708,19 +709,24 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
 
 struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using temporal_id = ::Tags::Time;
-  using tags_to_observe =
-      tmpl::list<ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
-          hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>>;
+  using tags_to_observe = tmpl::list<
+      ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+          hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>,
+      ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+          hydro::Tags::MagneticFlux<DataVector, 3, ::Frame::Inertial>,
+          ::Frame::Inertial>>;
   using vars_to_interpolate_to_target =
       tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
                  hydro::Tags::SpatialVelocity<DataVector, 3>,
+                 hydro::Tags::MagneticField<DataVector, 3>,
                  hydro::Tags::LorentzFactor<DataVector>,
                  gr::Tags::Lapse<DataVector>, gr::Tags::Shift<DataVector, 3>,
                  gr::Tags::SqrtDetSpatialMetric<DataVector>>;
   using compute_items_on_target = tmpl::push_front<
       tags_to_observe,
       ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
-      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>>;
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
+      hydro::Tags::MagneticFluxCompute<DataVector, 3, ::Frame::Inertial>>;
   using compute_target_points =
       intrp::TargetPoints::Sphere<Sphere, ::Frame::Inertial>;
   using post_interpolation_callbacks = tmpl::list<
