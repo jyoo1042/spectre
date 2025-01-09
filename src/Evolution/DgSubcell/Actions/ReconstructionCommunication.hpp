@@ -490,6 +490,8 @@ struct ReceiveAndSendDataForReconstruction {
     }();
     const int tci_decision =
         db::get<evolution::dg::subcell::Tags::TciDecision>(box);
+    const auto integration_order =
+        db::get<::Tags::HistoryEvolvedVariables<>>(box).integration_order();
 
     const size_t num_pts = subcell_mesh.extents().product();
     const size_t number_of_components = volume_data_to_slice.size() / num_pts;
@@ -583,12 +585,10 @@ struct ReceiveAndSendDataForReconstruction {
                           static_cast<int>(
                               rdmp_tci_data.min_variables_values.size())));
       evolution::dg::BoundaryData<Dim> data{
-          subcell_mesh,
-          dg_mesh.slice_away(problematic_direction.dimension()),
-          std::move(subcell_data_to_send),
-          std::nullopt,
-          next_time_step_id,
-          tci_decision};
+          dg_mesh,      subcell_mesh,
+          std::nullopt, std::move(subcell_data_to_send),
+          std::nullopt, next_time_step_id,
+          tci_decision, integration_order};
       Parallel::receive_data<
           evolution::dg::Tags::BoundaryCorrectionAndGhostCellsInbox<
               Dim, Parallel::is_dg_element_collection_v<ParallelComponent>>>(
