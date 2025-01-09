@@ -102,6 +102,18 @@ def mass_flux(
 
 # End functions for testing MassFlux.cpp
 
+# Functions for testing MagneticFlux.cpp
+
+
+def magnetic_flux(
+    magnetic_field,
+    sqrt_det_spatial_metric,
+):
+    return 0.5 * magnetic_field * sqrt_det_spatial_metric
+
+
+# End functions for testing MagneticFlux.cpp
+
 # Functions for testing SpecificEnthalpy.cpp
 
 
