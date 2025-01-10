@@ -128,56 +128,46 @@ void stress_energy_tensor(
   const auto rho_h_star =
       (get(rest_mass_density) +
        get(rest_mass_density) * get(specific_internal_energy)) +
-      get(pressure) + square(get(comoving_magnetic_field_magnitude));
+      get(pressure) ;
 
   const auto p_star =
-      get(pressure) + square(get(comoving_magnetic_field_magnitude)) / 2.;
+      get(pressure) ;
 
   get<0, 0>(*result) = (rho_h_star * square(get<0>(four_velocity_v))) +
-                       (p_star * get<0, 0>(inverse_spacetime_metric)) -
-                       (square(get<0>(comoving_magnetic_field_v)));
+                       (p_star * get<0, 0>(inverse_spacetime_metric)) ;
 
   get<1, 0>(*result) =
       (rho_h_star * get<1>(four_velocity_v) * get<0>(four_velocity_v)) +
-      (p_star * get<1, 0>(inverse_spacetime_metric)) -
-      (get<1>(comoving_magnetic_field_v) * get<0>(comoving_magnetic_field_v));
+      (p_star * get<1, 0>(inverse_spacetime_metric)) ;
 
   get<1, 1>(*result) = (rho_h_star * square(get<1>(four_velocity_v))) +
-                       (p_star * get<1, 1>(inverse_spacetime_metric)) -
-                       (square(get<1>(comoving_magnetic_field_v)));
+                       (p_star * get<1, 1>(inverse_spacetime_metric)) ;
 
   get<2, 0>(*result) =
       (rho_h_star * get<2>(four_velocity_v) * get<0>(four_velocity_v)) +
-      (p_star * get<2, 0>(inverse_spacetime_metric)) -
-      (get<2>(comoving_magnetic_field_v) * get<0>(comoving_magnetic_field_v));
+      (p_star * get<2, 0>(inverse_spacetime_metric)) ;
 
   get<2, 1>(*result) =
       (rho_h_star * get<2>(four_velocity_v) * get<1>(four_velocity_v)) +
-      (p_star * get<2, 1>(inverse_spacetime_metric)) -
-      (get<2>(comoving_magnetic_field_v) * get<1>(comoving_magnetic_field_v));
+      (p_star * get<2, 1>(inverse_spacetime_metric)) ;
 
   get<2, 2>(*result) = (rho_h_star * square(get<2>(four_velocity_v))) +
-                       (p_star * get<2, 2>(inverse_spacetime_metric)) -
-                       (square(get<2>(comoving_magnetic_field_v)));
+                       (p_star * get<2, 2>(inverse_spacetime_metric)) ;
 
   get<3, 0>(*result) =
       (rho_h_star * get<3>(four_velocity_v) * get<0>(four_velocity_v)) +
-      (p_star * get<3, 0>(inverse_spacetime_metric)) -
-      (get<3>(comoving_magnetic_field_v) * get<0>(comoving_magnetic_field_v));
+      (p_star * get<3, 0>(inverse_spacetime_metric));
 
   get<3, 1>(*result) =
       (rho_h_star * get<3>(four_velocity_v) * get<1>(four_velocity_v)) +
-      (p_star * get<3, 1>(inverse_spacetime_metric)) -
-      (get<3>(comoving_magnetic_field_v) * get<1>(comoving_magnetic_field_v));
+      (p_star * get<3, 1>(inverse_spacetime_metric)) ;
 
   get<3, 2>(*result) =
       (rho_h_star * get<3>(four_velocity_v) * get<2>(four_velocity_v)) +
-      (p_star * get<3, 2>(inverse_spacetime_metric)) -
-      (get<3>(comoving_magnetic_field_v) * get<2>(comoving_magnetic_field_v));
+      (p_star * get<3, 2>(inverse_spacetime_metric)) ;
 
   get<3, 3>(*result) = (rho_h_star * square(get<3>(four_velocity_v))) +
-                       (p_star * get<3, 3>(inverse_spacetime_metric)) -
-                       (square(get<3>(comoving_magnetic_field_v)));
+                       (p_star * get<3, 3>(inverse_spacetime_metric)) ;
 }
 
 #define DTYPE(data) BOOST_PP_TUPLE_ELEM(0, data)
