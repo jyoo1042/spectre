@@ -212,7 +212,7 @@ SPECTRE_TEST_CASE(
   using Klo = typename VariableFixing::FixToAtmosphere<3>::KappaLimitingOptions;
   const VariableFixing::FixToAtmosphere<3> variable_fixer_klo{
       1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11},
-      Klo{3.e-12, 1.e-3, 3.e-11, 0.01, std::nullopt, false}};
+      Klo{3.e-12, 1.e-3, 3.e-11, 0.01, std::nullopt, false}, std::nullopt};
   tuples::get<::Tags::VariableFixer<::VariableFixing::FixToAtmosphere<3>>>(
       arg_variables) = variable_fixer_klo;
 
