@@ -297,8 +297,57 @@ class FixToAtmosphere {
     static constexpr Options::String help = KappaLimitingOptions::help;
   };
 
-  using options = tmpl::list<DensityOfAtmosphere, DensityCutoff,
-                             VelocityLimiting, KappaLimiting>;
+  /*!
+   * \brief Options for limiting the magnetization and inverse plasma beta
+   * by effectively increaseing rest mass density and specific internal energy
+   * (pressure) until we satisfy prescribed upper bounds.
+   * This ensures the magnetization and inverse plasma beta in the simulation
+   * is bounded to avoid failure in primitive recovery.
+   *
+   * Magnetization is defined as $\sigma = b^2/\rho$ and invser plasma beta,
+   * $1/\beta = b^2/P$ where $b$ is comoving magnetic field magnitude and
+   * $P$ is the fluid pressure.
+   */
+  struct MagnetizationLimitingOptions {
+    struct MagnetizationBound {
+      using type = double;
+      static type lower_bound() { return 0.0; }
+      static constexpr Options::String help = {
+          "Upper bound for magneization sigma."};
+    };
+    struct InversePlasmaBetaBound {
+      using type = double;
+      static type lower_bound() { return 0.0; }
+      static constexpr Options::String help = {
+          "Upper bound for inverse plasma beta."};
+    };
+    using options = tmpl::list<MagnetizationBound, InversePlasmaBetaBound>;
+    static constexpr Options::String help = {
+        "If set then we apply a limiting precodure on the magnetizations "
+        "and inverse plasma beta to be bounded below by some prescribed "
+        "upper bounds."};
+
+    // NOLINTNEXTLINE(google-runtime-references)
+    void pup(PUP::er& p);
+
+    bool operator==(const MagnetizationLimitingOptions& rhs) const;
+    bool operator!=(const MagnetizationLimitingOptions& rhs) const;
+
+    double magnetization_bound{std::numeric_limits<double>::signaling_NaN()};
+    double inverse_plasma_beta_bound{
+        std::numeric_limits<double>::signaling_NaN()};
+  };
+  /// \brief If set then we apply a limiting precodure on the magnetization and
+  /// inverse plasma beta to be bounded below by some prescribed upper bounds
+  /// to ensure robust primitive recovery.
+  struct MagnetizationLimiting {
+    using type = Options::Auto<MagnetizationLimitingOptions, Disabled>;
+    static constexpr Options::String help = MagnetizationLimitingOptions::help;
+  };
+
+  using options =
+      tmpl::list<DensityOfAtmosphere, DensityCutoff, VelocityLimiting,
+                 KappaLimiting, MagnetizationLimiting>;
   static constexpr Options::String help = {
       "If the rest mass density is below DensityCutoff, it is set\n"
       "to DensityOfAtmosphere, and the pressure, and specific internal energy\n"
@@ -308,10 +357,12 @@ class FixToAtmosphere {
       "In addition, the spatial velocity is set to zero, and the Lorentz\n"
       "factor is set to one.\n"};
 
-  FixToAtmosphere(double density_of_atmosphere, double density_cutoff,
-                  std::optional<VelocityLimitingOptions> velocity_limiting,
-                  std::optional<KappaLimitingOptions> kappa_limiting,
-                  const Options::Context& context = {});
+  FixToAtmosphere(
+      double density_of_atmosphere, double density_cutoff,
+      std::optional<VelocityLimitingOptions> velocity_limiting,
+      std::optional<KappaLimitingOptions> kappa_limiting,
+      std::optional<MagnetizationLimitingOptions> magnetization_limiting,
+      const Options::Context& context = {});
 
   FixToAtmosphere() = default;
   FixToAtmosphere(const FixToAtmosphere& /*rhs*/) = default;
@@ -331,6 +382,7 @@ class FixToAtmosphere {
                  hydro::Tags::Pressure<DataVector>,
                  hydro::Tags::Temperature<DataVector>>;
   using argument_tags = tmpl::list<hydro::Tags::ElectronFraction<DataVector>,
+                                   hydro::Tags::MagneticField<DataVector, Dim>,
                                    gr::Tags::SpatialMetric<DataVector, Dim>,
                                    hydro::Tags::GrmhdEquationOfState>;
 
@@ -345,6 +397,7 @@ class FixToAtmosphere {
       gsl::not_null<Scalar<DataVector>*> pressure,
       gsl::not_null<Scalar<DataVector>*> temperature,
       const Scalar<DataVector>& electron_fraction,
+      const tnsr::I<DataVector, Dim, Frame::Inertial>& magnetic_field,
       const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
       const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
           equation_of_state) const;
@@ -359,6 +412,11 @@ class FixToAtmosphere {
   }
   const std::optional<KappaLimitingOptions>& kappa_limiting() const {
     return kappa_limiting_;
+  }
+
+  const std::optional<MagnetizationLimitingOptions>& magnetization_limiting()
+      const {
+    return magnetization_limiting_;
   }
   /// @}
 
@@ -391,6 +449,24 @@ class FixToAtmosphere {
           equation_of_state,
       size_t grid_index) const;
 
+  template <size_t ThermodynamicDim>
+  void apply_magnetization_limit(
+      gsl::not_null<Scalar<DataVector>*> rest_mass_density,
+      gsl::not_null<Scalar<DataVector>*> specific_internal_energy,
+      gsl::not_null<Scalar<DataVector>*> temperature,
+      gsl::not_null<Scalar<DataVector>*> pressure,
+      gsl::not_null<tnsr::I<DataVector, Dim, Frame::Inertial>*>
+          spatial_velocity,
+      gsl::not_null<Scalar<DataVector>*> lorentz_factor,
+      const Scalar<DataVector>& electron_fraction,
+      const tnsr::I<DataVector, Dim, Frame::Inertial>& magnetic_field,
+      const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
+      double comoving_magnetic_field_squared, double magnetic_field_squared,
+      double magnetic_field_dot_v,
+      const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
+          equation_of_state,
+      size_t grid_index) const;
+
   template <size_t SpatialDim>
   // NOLINTNEXTLINE(readability-redundant-declaration)
   friend bool operator==(const FixToAtmosphere<SpatialDim>& lhs,
@@ -400,6 +476,8 @@ class FixToAtmosphere {
   double density_cutoff_{std::numeric_limits<double>::signaling_NaN()};
   std::optional<VelocityLimitingOptions> velocity_limiting_{std::nullopt};
   std::optional<KappaLimitingOptions> kappa_limiting_{std::nullopt};
+  std::optional<MagnetizationLimitingOptions> magnetization_limiting_{
+      std::nullopt};
 };
 
 template <size_t Dim>
