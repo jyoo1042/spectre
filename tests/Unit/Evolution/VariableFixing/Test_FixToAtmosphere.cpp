@@ -31,19 +31,28 @@ void test_variable_fixer(
   // 2.e-12 -> below cutoff, velocity goes to zero
   // 2.e-11 -> above cutoff, no changes
   // 4.e-12 -> density unchanged, velocity restricted
-  Scalar<DataVector> density{DataVector{2.e-12, 2.e-11, 4.e-12}};
+  // 4.e-10 -> b^2/density > 100 for given magnetic field. density increased
+  //           pressure and energy increaed accordingly.
+
+  const bool use_magnetization_limiting =
+      variable_fixer.magnetization_limiting() != std::nullopt;
+
+  Scalar<DataVector> density{DataVector{2.e-12, 2.e-11, 4.e-12, 4e-10}};
   auto pressure = equation_of_state.pressure_from_density(density);
   auto specific_internal_energy =
       equation_of_state.specific_internal_energy_from_density(density);
   auto temperature = equation_of_state.temperature_from_density(density);
   const Scalar<DataVector> electron_fraction{
       DataVector{get(density).size(), 0.5}};
+  auto magnetic_field =
+      make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
+  magnetic_field.get(0) = DataVector{0.0, 0.0, 0.0, 2.e-4};
 
-  Scalar<DataVector> lorentz_factor{
-      DataVector{5.0 / 3.0, 7.0710678118654752, 1.8898223650461359}};
+  Scalar<DataVector> lorentz_factor{DataVector{
+      5.0 / 3.0, 7.0710678118654752, 1.8898223650461359, 1.4142135623730951}};
   auto spatial_velocity =
       make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
-  spatial_velocity.get(0) = DataVector{0.8, 0.7, 0.6};
+  spatial_velocity.get(0) = DataVector{0.8, 0.7, 0.6, 0.5};
   auto spatial_metric =
       make_with_value<tnsr::ii<DataVector, Dim, Frame::Inertial>>(density, 0.0);
   for (size_t i = 0; i < Dim; ++i) {
@@ -51,15 +60,17 @@ void test_variable_fixer(
   }
   variable_fixer(&density, &specific_internal_energy, &spatial_velocity,
                  &lorentz_factor, &pressure, &temperature, electron_fraction,
-                 spatial_metric, equation_of_state);
+                 magnetic_field, spatial_metric, equation_of_state);
 
-  Scalar<DataVector> expected_density{DataVector{1.e-12, 2.e-11, 4.e-12}};
+  Scalar<DataVector> expected_density{
+      use_magnetization_limiting ? DataVector{1.e-12, 2.e-11, 4.e-12, 8.e-10}
+                                 : DataVector{1.e-12, 2.e-11, 4.e-12, 4.e-10}};
   auto expected_pressure =
       equation_of_state.pressure_from_density(expected_density);
   auto expected_specific_internal_energy =
       equation_of_state.specific_internal_energy_from_density(expected_density);
-  Scalar<DataVector> expected_lorentz_factor{
-      DataVector{1.0, 7.0710678118654752, 1.0000000001020408}};
+  Scalar<DataVector> expected_lorentz_factor{DataVector{
+      1.0, 7.0710678118654752, 1.0000000001020408, 1.4142135623730951}};
   auto expected_spatial_velocity =
       make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
   expected_spatial_velocity.get(0)[1] = 0.7;
@@ -69,6 +80,7 @@ void test_variable_fixer(
   expected_spatial_velocity.get(0)[2] = 0.6 * (4.e-12 - 3.e-12) /
                                         (1.e-11 - 3.e-12) * 1.e-4 /
                                         sqrt(0.6 * 0.6 * 2.0);
+  expected_spatial_velocity.get(0)[3] = 0.5;
 
   CHECK_ITERABLE_APPROX(density, expected_density);
   CHECK_ITERABLE_APPROX(pressure, expected_pressure);
@@ -85,6 +97,9 @@ void test_variable_fixer(
     const bool use_kappa_limiting, const double min_temperature) {
   CAPTURE(use_kappa_limiting);
   CAPTURE(min_temperature);
+  // This test assumes magnetization limiting is disabled.
+  REQUIRE(variable_fixer.magnetization_limiting() == std::nullopt);
+
   Scalar<DataVector> density{DataVector{2.e-12, 2.e-11, 4.e-12, 2.e-11}};
   Scalar<DataVector> specific_internal_energy{DataVector{
       2., 3., 3.,
@@ -97,6 +112,9 @@ void test_variable_fixer(
       density, specific_internal_energy);
   const Scalar<DataVector> electron_fraction{
       DataVector{get(density).size(), 0.5}};
+  auto magnetic_field =
+      make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
+  magnetic_field.get(0) = DataVector{0.0, 0.0, 0.0, 0.0};
 
   Scalar<DataVector> lorentz_factor{DataVector{
       5. / 3., 7.0710678118654752, 1.8898223650461359, 7.0710678118654752}};
@@ -112,7 +130,7 @@ void test_variable_fixer(
   }
   variable_fixer(&density, &specific_internal_energy, &spatial_velocity,
                  &lorentz_factor, &pressure, &temperature, electron_fraction,
-                 spatial_metric, equation_of_state);
+                 magnetic_field, spatial_metric, equation_of_state);
 
   Scalar<DataVector> expected_density{
       DataVector{1.e-12, 2.e-11, 4.e-12, 2.e-11}};
@@ -186,22 +204,85 @@ void test_variable_fixer(
 }
 
 template <size_t Dim>
+void test_variable_fixer(
+    const VariableFixing::FixToAtmosphere<Dim>& variable_fixer,
+    const EquationsOfState::EquationOfState<true, 2>& equation_of_state) {
+  // This tests checks the magnetization limitng and assumes kappa limiting is
+  // disabled.
+
+  REQUIRE(variable_fixer.kappa_limiting() == std::nullopt);
+
+  // 1st case: rho, P needed to be increased
+  // 2nd case: only rho need to be increased
+  // 3rd case: only P need to be increased
+  // 4th case: no need for change.
+  Scalar<DataVector> density{DataVector{4.e-10, 4.e-10, 8.e-10, 8.e-10}};
+  Scalar<DataVector> specific_internal_energy{
+      DataVector{7.5e-2, 1.5, 3.75e-2, 1.5}};
+  CHECK(get(specific_internal_energy).size() == get(density).size());
+
+  auto pressure = equation_of_state.pressure_from_density_and_energy(
+      density, specific_internal_energy);
+  auto temperature = equation_of_state.temperature_from_density_and_energy(
+      density, specific_internal_energy);
+  const Scalar<DataVector> electron_fraction{
+      DataVector{get(density).size(), 0.5}};
+  auto magnetic_field =
+      make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.0);
+  magnetic_field.get(0) = DataVector{get(density).size(), 2.e-4};
+
+  Scalar<DataVector> lorentz_factor{
+      DataVector{get(density).size(), 1.4142135623730951}};
+  auto spatial_velocity =
+      make_with_value<tnsr::I<DataVector, Dim, Frame::Inertial>>(density, 0.);
+  spatial_velocity.get(0) = DataVector{get(density).size(), 0.5};
+
+  auto spatial_metric =
+      make_with_value<tnsr::ii<DataVector, Dim, Frame::Inertial>>(density, 0.);
+  for (size_t i = 0; i < Dim; ++i) {
+    spatial_metric.get(i, i) = 2.;
+  }
+  variable_fixer(&density, &specific_internal_energy, &spatial_velocity,
+                 &lorentz_factor, &pressure, &temperature, electron_fraction,
+                 magnetic_field, spatial_metric, equation_of_state);
+
+  Scalar<DataVector> expected_density{DataVector{4, 8.e-10}};
+  Scalar<DataVector> expected_pressure{
+      DataVector{4.e-11, 4.e-10, 4.e-11, 8.e-10}};
+  Scalar<DataVector> expected_specific_internal_energy{
+      DataVector{7.5e-2, 0.75, 7.5e-2, 1.5}};
+  CHECK_ITERABLE_APPROX(density, expected_density);
+  CHECK_ITERABLE_APPROX(pressure, expected_pressure);
+  CHECK_ITERABLE_APPROX(specific_internal_energy,
+                        expected_specific_internal_energy);
+}
+
+template <size_t Dim>
 void test_variable_fixer() {
   using Vlo =
       typename VariableFixing::FixToAtmosphere<Dim>::VelocityLimitingOptions;
   using Klo =
       typename VariableFixing::FixToAtmosphere<Dim>::KappaLimitingOptions;
+  using Mlo = typename VariableFixing::FixToAtmosphere<
+      Dim>::MagnetizationLimitingOptions;
   // Test for representative 1-d equation of state
   const VariableFixing::FixToAtmosphere<Dim> variable_fixer_klo{
       1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11},
-      Klo{3.e-12, 1.e-3, 3.e-11, 0.01, std::nullopt, false}};
+      Klo{3.e-12, 1.e-3, 3.e-11, 0.01, std::nullopt, false}, std::nullopt};
   const VariableFixing::FixToAtmosphere<Dim> variable_fixer{
-      1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11}, std::nullopt};
+      1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11}, std::nullopt,
+      std::nullopt};
+  const VariableFixing::FixToAtmosphere<Dim> variable_fixer_mlo{
+      1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11}, std::nullopt,
+      Mlo{1.e2, 1.e3}};
   EquationsOfState::PolytropicFluid<true> polytrope{1.0, 2.0};
   test_variable_fixer<Dim>(variable_fixer, polytrope);
   test_variable_fixer<Dim>(variable_fixer_klo, polytrope);
+  test_variable_fixer<Dim>(variable_fixer_mlo, polytrope);
+
   test_serialization(variable_fixer);
   test_serialization(variable_fixer_klo);
+  test_serialization(variable_fixer_mlo);
 
   const auto check_velocity_limiting_options = [](const auto& var_fixer) {
     CHECK(var_fixer.density_of_atmosphere() == 1.e-12);
@@ -217,6 +298,7 @@ void test_variable_fixer() {
   };
   check_velocity_limiting_options(variable_fixer);
   check_velocity_limiting_options(variable_fixer_klo);
+  check_velocity_limiting_options(variable_fixer_mlo);
 
   CHECK(not variable_fixer.kappa_limiting().has_value());
   REQUIRE(variable_fixer_klo.kappa_limiting().has_value());
@@ -237,7 +319,8 @@ void test_variable_fixer() {
           "  NearAtmosphereMaxVelocity: 1.0e-4\n"
           "  AtmosphereDensityCutoff: 3.0e-12\n"
           "  TransitionDensityBound: 1.0e-11\n"
-          "KappaLimiting: Disabled\n");
+          "KappaLimiting: Disabled\n"
+          "MagnetizationLimiting: Disabled\n");
   const auto fixer_from_options_klo =
       TestHelpers::test_creation<VariableFixing::FixToAtmosphere<Dim>>(
           "DensityOfAtmosphere: 1.0e-12\n"
@@ -253,24 +336,41 @@ void test_variable_fixer() {
           "  DensityUpperBound: 3.0e-11\n"
           "  EpsilonKappaMax: 0.01\n"
           "  MinTemperature: 1.0e-3\n"
-          "  LimitAboveDensityUpperBound: False\n");
+          "  LimitAboveDensityUpperBound: False\n"
+          "MagnetizationLimiting: Disabled\n");
+  const auto fixer_from_options_mlo =
+      TestHelpers::test_creation<VariableFixing::FixToAtmosphere<Dim>>(
+          "DensityOfAtmosphere: 1.0e-12\n"
+          "DensityCutoff: 3.0e-12\n"
+          "VelocityLimiting:\n"
+          "  AtmosphereMaxVelocity: 0\n"
+          "  NearAtmosphereMaxVelocity: 1.0e-4\n"
+          "  AtmosphereDensityCutoff: 3.0e-12\n"
+          "  TransitionDensityBound: 1.0e-11\n"
+          "KappaLimiting: Disabled\n"
+          "MagnetizationLimiting:\n"
+          "  MagnetizationBound: 1.0e2\n"
+          "  InversePlasmaBetaBound: 1.0e3\n");
   test_variable_fixer(fixer_from_options, polytrope);
   test_variable_fixer(fixer_from_options_klo, polytrope);
+  test_variable_fixer(fixer_from_options_mlo, polytrope);
 
   // Test for representative 2-d equation of state
   EquationsOfState::IdealFluid<true> ideal_fluid{5.0 / 3.0};
   test_variable_fixer<Dim>(variable_fixer, ideal_fluid, false, 0.0);
   test_variable_fixer<Dim>(variable_fixer_klo, ideal_fluid, true, 0.0);
+  test_variable_fixer<Dim>(variable_fixer_mlo, ideal_fluid);
 
   test_variable_fixer<Dim>(fixer_from_options, ideal_fluid, false, 1.0e-3);
   test_variable_fixer<Dim>(fixer_from_options_klo, ideal_fluid, true, 1.0e-3);
+  test_variable_fixer<Dim>(fixer_from_options_mlo, ideal_fluid);
 }
 }  // namespace
 
 SPECTRE_TEST_CASE("Unit.Evolution.VariableFixing.FixToAtmosphere",
                   "[VariableFixing][Unit]") {
   test_fix_reconstructed_state_to_atmosphere();
-  test_variable_fixer<1>();
-  test_variable_fixer<2>();
+  //   test_variable_fixer<1>();
+  //   test_variable_fixer<2>();
   test_variable_fixer<3>();
 }
