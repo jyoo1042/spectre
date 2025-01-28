@@ -84,6 +84,7 @@ void compute_conservatives_for_reconstruction(
         get<hydro::Tags::Temperature<DataVector>>(vars_on_face),
 
         get<hydro::Tags::ElectronFraction<DataVector>>(*vars_on_face),
+        get<hydro::Tags::MagneticField<DataVector, 3>>(*vars_on_face),
         spatial_metric, eos);
   }
 
