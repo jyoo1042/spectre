@@ -92,6 +92,8 @@ VariableFixing:
       EpsilonKappaMax: 0.01
       LimitAboveDensityUpperBound: False
       MinTemperature: FromEos
+    MagnetizationLimiting: Disabled
+
   LimitLorentzFactor:
     Enable: false # Only needed when not using Kastaun for recovery
     MaxDensityCutoff: 1.0e-12
