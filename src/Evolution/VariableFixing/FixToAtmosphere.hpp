@@ -455,8 +455,14 @@ class FixToAtmosphere {
       gsl::not_null<Scalar<DataVector>*> specific_internal_energy,
       gsl::not_null<Scalar<DataVector>*> temperature,
       gsl::not_null<Scalar<DataVector>*> pressure,
+      gsl::not_null<tnsr::I<DataVector, Dim, Frame::Inertial>*>
+          spatial_velocity,
+      gsl::not_null<Scalar<DataVector>*> lorentz_factor,
       const Scalar<DataVector>& electron_fraction,
+      const tnsr::I<DataVector, Dim, Frame::Inertial>& magnetic_field,
+      const tnsr::ii<DataVector, Dim, Frame::Inertial>& spatial_metric,
       const double comoving_magnetic_field_squared,
+      const double magnetic_field_squared, const double magnetic_field_dot_v,
       const EquationsOfState::EquationOfState<true, ThermodynamicDim>&
           equation_of_state,
       size_t grid_index) const;
