@@ -77,7 +77,7 @@ class TestCoMovingMF(unittest.TestCase):
             np.array(lapse)[0],
         )
 
-        assert type(bindings) == tnsr.a[DataVector, 3]
+        assert type(bindings) == tnsr.A[DataVector, 3]
         np.testing.assert_allclose(bindings, alternative)
 
     def test_comoving_magnetic_field_squared(self):
