@@ -452,7 +452,7 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
              (get<1, 2>(stress_energy_tensor_v) * get<2, 0>(spacetime_metric)) +
              (get<1, 3>(stress_energy_tensor_v) * get<3, 0>(spacetime_metric)));
         const double edot_contribution =
-            definite_integral(abs(edot_integrand) * new_det_jacobian, new_mesh);
+            definite_integral(edot_integrand * new_det_jacobian, new_mesh);
         edot += edot_contribution;
 
       };
