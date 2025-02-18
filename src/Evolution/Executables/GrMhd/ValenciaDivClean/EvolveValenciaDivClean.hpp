@@ -159,6 +159,7 @@
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/TovStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/Tags.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Surfaces/Tags.hpp"
+#include "PointwiseFunctions/Hydro/DiskDiagnostics.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
 #include "PointwiseFunctions/Hydro/InversePlasmaBeta.hpp"
@@ -312,7 +313,11 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
           hydro::Tags::TransportVelocity<DataVector, volume_dim,
                                          Frame::Inertial>>,
       hydro::Tags::InversePlasmaBetaCompute<DataVector>,
-      hydro::Tags::StressEnergyTensorCompute<DataVector>>;
+      hydro::Tags::StressEnergyTensorCompute<DataVector>,
+      hydro::Tags::EdotCompute<DataVector, ::Events::Tags::ObserverCoordinates<
+                                               volume_dim, Frame::Inertial>>,
+      hydro::Tags::LdotCompute<DataVector, ::Events::Tags::ObserverCoordinates<
+                                               volume_dim, Frame::Inertial>>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
