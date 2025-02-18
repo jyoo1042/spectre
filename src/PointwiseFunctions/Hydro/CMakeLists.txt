@@ -9,6 +9,7 @@ spectre_target_sources(
   ${LIBRARY}
   PRIVATE
   ComovingMagneticField.cpp
+  DiskDiagnostics.cpp
   InversePlasmaBeta.cpp
   LorentzFactor.cpp
   LowerSpatialFourVelocity.cpp
@@ -27,6 +28,7 @@ spectre_target_headers(
   INCLUDE_DIRECTORY ${CMAKE_SOURCE_DIR}/src
   HEADERS
   ComovingMagneticField.hpp
+  DiskDiagnostics.hpp
   InversePlasmaBeta.hpp
   LorentzFactor.hpp
   LowerSpatialFourVelocity.hpp
