@@ -3,8 +3,14 @@
 
 #pragma once
 
+#include "DataStructures/DataBox/Tag.hpp"
 #include "DataStructures/Tensor/TypeAliases.hpp"
+#include "PointwiseFunctions/GeneralRelativity/Tags.hpp"
+#include "PointwiseFunctions/GeneralRelativity/TagsDeclarations.hpp"
+#include "PointwiseFunctions/Hydro/Tags.hpp"
+#include "PointwiseFunctions/Hydro/TagsDeclarations.hpp"
 #include "Utilities/Gsl.hpp"
+#include "Utilities/TMPL.hpp"
 
 namespace hydro {
 
@@ -156,4 +162,43 @@ void stress_energy_tensor(
     const tnsr::I<DataType, 3>& magnetic_field,
     const tnsr::ii<DataType, 3>& spatial_metric,
     const tnsr::II<DataType, 3>& inverse_spatial_metric);
+
+namespace Tags {
+
+template <typename DataType>
+struct StressEnergyTensor : db::SimpleTag {
+  using type = tnsr::AA<DataType, 3, Frame::Inertial>;
+};
+
+template <typename DataType>
+struct StressEnergyTensorCompute : hydro::Tags::StressEnergyTensor<DataType>,
+                                   db::ComputeTag {
+  using base = StressEnergyTensor<DataType>;
+  using return_type = typename base::type;
+  using argument_tags = tmpl::list<
+      RestMassDensity<DataType>, SpecificInternalEnergy<DataType>,
+      Pressure<DataType>, LorentzFactor<DataType>, ::gr::Tags::Lapse<DataType>,
+      ComovingMagneticFieldMagnitude<DataType>,
+      SpatialVelocity<DataType, 3, Frame::Inertial>,
+      ::gr::Tags::Shift<DataType, 3, Frame::Inertial>,
+      MagneticField<DataType, 3, Frame::Inertial>,
+      ::gr::Tags::SpatialMetric<DataType, 3, Frame::Inertial>,
+      ::gr::Tags::InverseSpatialMetric<DataType, 3, Frame::Inertial>>;
+
+  static constexpr auto function = static_cast<void (*)(
+      gsl::not_null<tnsr::AA<DataType, 3>*> result,
+      const Scalar<DataType>& rest_mass_density,
+      const Scalar<DataType>& specific_internal_energy,
+      const Scalar<DataType>& pressure, const Scalar<DataType>& lorentz_factor,
+      const Scalar<DataType>& lapse,
+      const Scalar<DataType>& comoving_magnetic_field_magnitude,
+      const tnsr::I<DataType, 3>& spatial_velocity,
+      const tnsr::I<DataType, 3>& shift,
+      const tnsr::I<DataType, 3>& magnetic_field,
+      const tnsr::ii<DataType, 3>& spatial_metric,
+      const tnsr::II<DataType, 3>& inverse_spatial_metric)>(
+      &hydro::stress_energy_tensor<DataType>);
+};
+
+}  // namespace Tags
 }  // namespace hydro
