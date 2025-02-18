@@ -167,6 +167,7 @@
 #include "PointwiseFunctions/Hydro/MagneticFlux.hpp"
 #include "PointwiseFunctions/Hydro/MassFlux.hpp"
 #include "PointwiseFunctions/Hydro/QuadrupoleFormula.hpp"
+#include "PointwiseFunctions/Hydro/StressEnergy.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
 #include "PointwiseFunctions/Hydro/TransportVelocity.hpp"
 #include "Time/Actions/AdvanceTime.hpp"
@@ -313,7 +314,8 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
           ::Events::Tags::ObserverCoordinates<volume_dim, Frame::Inertial>,
           hydro::Tags::TransportVelocity<DataVector, volume_dim,
                                          Frame::Inertial>>,
-      hydro::Tags::InversePlasmaBetaCompute<DataVector>>;
+      hydro::Tags::InversePlasmaBetaCompute<DataVector>,
+      hydro::Tags::StressEnergyTensorCompute<DataVector>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
