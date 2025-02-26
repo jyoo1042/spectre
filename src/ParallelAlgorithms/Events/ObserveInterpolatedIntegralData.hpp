@@ -77,15 +77,13 @@ namespace detail {
 using ObserveInterpolatedReductionData = Parallel::ReductionData<
     // Observation value (Time)
     Parallel::ReductionDatum<double, funcl::AssertEqual<>>,
-    // MassAccretionRate Mdot
+    // Mdot
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // MagneticFlux Phi_BH
+    // Edot
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Total Energy Flux Edot
+    // Ldot
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // AngularMomentum Flux Ldot
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // SurfaceIntegral of the given tag
+    // Phi_B
     Parallel::ReductionDatum<double, funcl::Plus<>>>;
 }  // namespace detail
 /// \cond
@@ -251,12 +249,11 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
       const ElementId<VolumeDim>& element_id,
       const ParallelComponent* const /*meta*/,
       const ObservationValue& observation_value) {
-    // this will be surface integral of a given tag for debugging purpose.
-    double surface_integral_value = 0.0;
-    double magnetic_flux = 0.0;
+    // computed by computing integrand outside and then interpolated as whole
     double mdot = 0.0;
-    double ldot = 0.0;
     double edot = 0.0;
+    double ldot = 0.0;
+    double phib = 0.0;
 
     const DataVector det_jacobian =
         1. /
@@ -300,162 +297,165 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
 
       // we need to convert the above target points in element logical frame
       // to inertial frame so that we can evaluate the metric quantities
-      auto ones =
-          make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
-              target_points, 1.0);
-      auto target_points_inertial =
-          make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
-              target_points, x0);
+      //   auto ones =
+      //       make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
+      //           target_points, 1.0);
+      //   auto target_points_inertial =
+      //       make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
+      //           target_points, x0);
 
-      get<1>(target_points_inertial) = y0;
-      get<2>(target_points_inertial) = z0;
-      for (size_t i = 0; i < VolumeDim; ++i) {
-        for (size_t j = 0; j < VolumeDim; ++j) {
-          target_points_inertial.get(i) +=
-              jac.get(i, j)[0] * (target_points.get(j) + ones.get(j));
-        }
-      }
-      using derived_classes =
-          tmpl::at<typename Metavariables::factory_creation::factory_classes,
-                   evolution::initial_data::InitialData>;
-      auto* initial_data_ptr =
-          &Parallel::get<evolution::initial_data::Tags::InitialData>(cache);
+      //   get<1>(target_points_inertial) = y0;
+      //   get<2>(target_points_inertial) = z0;
+      //   for (size_t i = 0; i < VolumeDim; ++i) {
+      //     for (size_t j = 0; j < VolumeDim; ++j) {
+      //       target_points_inertial.get(i) +=
+      //           jac.get(i, j)[0] * (target_points.get(j) + ones.get(j));
+      //     }
+      //   }
+      //   using derived_classes =
+      //       tmpl::at<typename
+      //       Metavariables::factory_creation::factory_classes,
+      //                evolution::initial_data::InitialData>;
+      //   auto* initial_data_ptr =
+      //     &Parallel::get<evolution::initial_data::Tags::InitialData>(cache);
       // all the metric related tags that we need for computing
       // MassAccretionRate: shift, lapse, sqrt_det_spatial_metric
-      using metric_tags = tmpl::list<
-          gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
-          gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
-          gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>,
-          gr::Tags::SqrtDetSpatialMetric<DataVector>,
-          gr::Tags::Lapse<DataVector>>;
-      using metric_tuples = tuples::tagged_tuple_from_typelist<metric_tags>;
-      auto metric_quantities =
-          call_with_dynamic_type<metric_tuples, derived_classes>(
-              initial_data_ptr,
-              [&target_points_inertial](const auto* const data_or_solution) {
-                return evolution::Initialization::initial_data(
-                    *data_or_solution, target_points_inertial, 0.0,
-                    metric_tags{});
-              });
+      //   using metric_tags = tmpl::list<
+      //       gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
+      //       gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
+      //       gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>,
+      //       gr::Tags::SqrtDetSpatialMetric<DataVector>,
+      //       gr::Tags::Lapse<DataVector>>;
+      //   using metric_tuples =
+      //   tuples::tagged_tuple_from_typelist<metric_tags>; auto
+      //   metric_quantities =
+      //       call_with_dynamic_type<metric_tuples, derived_classes>(
+      //           initial_data_ptr,
+      //          [&target_points_inertial](const auto* const data_or_solution)
+      //           {
+      //             return evolution::Initialization::initial_data(
+      //                 *data_or_solution, target_points_inertial, 0.0,
+      //                 metric_tags{});
+      //           });
 
-      const auto rho = get(get<hydro::Tags::RestMassDensity<DataVector>>(box));
-      const auto energy =
-          get(get<hydro::Tags::SpecificInternalEnergy<DataVector>>(box));
-      const auto pressure = get(get<hydro::Tags::Pressure<DataVector>>(box));
-      const auto bm = get(
-          get<hydro::Tags::ComovingMagneticFieldMagnitude<DataVector>>(box));
-
-      const auto v =
+      // get hydro stuffs from the box
+      const auto& rho = get<hydro::Tags::RestMassDensity<DataVector>>(box);
+      const auto& energy =
+          get<hydro::Tags::SpecificInternalEnergy<DataVector>>(box);
+      const auto& pressure = get<hydro::Tags::Pressure<DataVector>>(box);
+      const auto& lorentz_factor =
+          get<hydro::Tags::LorentzFactor<DataVector>>(box);
+      const auto& comoving_magnetic_field_magnitude =
+          get<hydro::Tags::ComovingMagneticFieldMagnitude<DataVector>>(box);
+      const auto& spatial_velocity =
           get<hydro::Tags::SpatialVelocity<DataVector, 3, Frame::Inertial>>(
               box);
-      const auto b =
+      const auto& magnetic_field =
           get<hydro::Tags::MagneticField<DataVector, 3, Frame::Inertial>>(box);
-      const auto lf = get(get<hydro::Tags::LorentzFactor<DataVector>>(box));
 
-      const auto record_tensor_component_impl = [&interpolant,
-                                                 &surface_integral_value,
-                                                 &magnetic_flux, &mdot, &edot,
-                                                 &ldot, &new_mesh,
-                                                 &det_jacobian, &rho, &energy,
-                                                 &pressure, &bm, &v, &b, &lf,
-                                                 &metric_quantities](
+      // get metric tags from the box
+      const auto& shift =
+          get<gr::Tags::Shift<DataVector, 3, Frame::Inertial>>(box);
+      const auto& lapse = get<gr::Tags::Lapse<DataVector>>(box);
+      const auto& spatial_metric =
+          get<gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>>(box);
+      const auto& inverse_spatial_metric =
+          get<gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>(
+              box);
+      const auto& gamma = get<gr::Tags::SqrtDetSpatialMetric<DataVector>>(box);
+
+      // need to compute lorentz factor, Bdotv, B^2, b^2
+      //   Scalar<DataVector> velocity_squared{};
+      //   tenex::evaluate<>(make_not_null(&velocity_squared),
+      //                     spatial_metric(ti::i, ti::j) *
+      //                     spatial_velocity(ti::I) *
+      //                         spatial_velocity(ti::J));
+      //   Scalar<DataVector> lorentz_factor{};
+      //   get(lorentz_factor) = 1.0 / sqrt(1.0 - get(velocity_squared));
+
+      //   Scalar<DataVector> B_dot_v;
+      //   tenex::evaluate<>(make_not_null(&B_dot_v), spatial_metric(ti::i,
+      //   ti::j) *
+      //                                               magnetic_field(ti::I)
+      //                                                  *
+      //                                             spatial_velocity(ti::J));
+
+      //   Scalar<DataVector> B_squared{};
+      //   tenex::evaluate<>(make_not_null(&B_squared),
+      //                     spatial_metric(ti::i, ti::j) *
+      //                     magnetic_field(ti::I) *
+      //                         magnetic_field(ti::J));
+
+      //   Scalar<DataVector> comoving_magnetic_field_magnitude{};
+      //   get(comoving_magnetic_field_magnitude) =
+      //       get(B_squared) / square(get(lorentz_factor)) + get(B_dot_v);
+      //   get(comoving_magnetic_field_magnitude) =
+      //       sqrt(get(comoving_magnetic_field_magnitude));
+
+      tnsr::AA<DataVector, 3, Frame::Inertial> stress_energy_tensor_v{};
+      hydro::stress_energy_tensor(make_not_null(&stress_energy_tensor_v), rho,
+                                  energy, pressure, lorentz_factor, lapse,
+                                  comoving_magnetic_field_magnitude,
+                                  spatial_velocity, shift, magnetic_field,
+                                  spatial_metric, inverse_spatial_metric);
+
+      const auto spacetime_metric_v = gr::spacetime_metric(
+          Scalar<DataVector>{lapse}, shift, spatial_metric);
+
+      tnsr::Ab<DataVector, 3, Frame::Inertial> lowered_stress_energy_tensor_v{};
+      tenex::evaluate<ti::A, ti::c>(
+          make_not_null(&lowered_stress_energy_tensor_v),
+          stress_energy_tensor_v(ti::A, ti::B) *
+              spacetime_metric_v(ti::b, ti::c));
+
+      const DataVector sqrt_g = get(lapse) * get(gamma);
+      const DataVector mdot_integrand =
+          get(rho) * get(lorentz_factor) * get(gamma) *
+          (get(lapse) * get<0>(spatial_velocity) - get<0>(shift));
+      const DataVector edot_integrand =
+          sqrt_g * get<1, 0>(lowered_stress_energy_tensor_v);
+      const DataVector ldot_integrand =
+          sqrt_g * get<1, 3>(lowered_stress_energy_tensor_v);
+      const DataVector phib_integrand =
+          get(gamma) * abs(get<0>(magnetic_field));
+      const auto record_tensor_component_impl = [&interpolant, &mdot, &edot,
+                                                 &ldot, &phib, &new_mesh,
+                                                 &det_jacobian, &mdot_integrand,
+                                                 &edot_integrand,
+                                                 &ldot_integrand,
+                                                 &phib_integrand](
                                                     const auto& tensor) {
-        const auto new_tensor = interpolant.interpolate(tensor[0]);
-        const auto new_rho = interpolant.interpolate(rho);
-        const auto new_pressure = interpolant.interpolate(pressure);
-        const auto new_energy = interpolant.interpolate(energy);
-        const auto new_bm = interpolant.interpolate(bm);
-        const auto new_det_jacobian = interpolant.interpolate(det_jacobian);
-        const auto new_lf = interpolant.interpolate(lf);
+        const auto mdot_integrand_interpolated =
+            interpolant.interpolate(mdot_integrand);
+        const auto edot_integrand_interpolated =
+            interpolant.interpolate(edot_integrand);
+        const auto ldot_integrand_interpolated =
+            interpolant.interpolate(ldot_integrand);
+        const auto phib_integrand_interpolated =
+            interpolant.interpolate(phib_integrand);
+        const auto det_jacobian_interpolated =
+            interpolant.interpolate(det_jacobian);
 
-        // we do it this inconvenient looking way because
-        // freaking interpolant has two options: DataVector or Variables
-        // and I am too lazy to do it with Variables
-        tnsr::I<DataVector, 3, Frame::Inertial> new_v{};
-        tnsr::I<DataVector, 3, Frame::Inertial> new_b{};
-        for (size_t i = 0; i < 3; ++i) {
-          new_v.get(i) = interpolant.interpolate(v[0]);
-          new_b.get(i) = interpolant.interpolate(b[0]);
-        }
-
-        // this is where we perform surface intgral of the "new_tensor"
-        // basically whichever tensor integrated at the surface
-        const double surface_integral_value_contribution =
-            definite_integral(new_tensor * new_det_jacobian, new_mesh);
-        surface_integral_value += surface_integral_value_contribution;
-
-        // this is where we compute Mdot
-        // here we directly compute all the metric quantities and
-        // interpolate the rest
-        // integral rho * u^r sqrt(-g) dphi dtheta
-        const auto shift =
-            (get<gr::Tags::Shift<DataVector, 3, Frame::Inertial>>(
-                metric_quantities));
-        const auto lapse =
-            get(get<gr::Tags::Lapse<DataVector>>(metric_quantities));
-        const auto detsqrtsm = get(
-            get<gr::Tags::SqrtDetSpatialMetric<DataVector>>(metric_quantities));
-        const auto spatial_metric =
-            get<gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>>(
-                metric_quantities);
-        const auto inverse_spatial_metric =
-            get<gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>(
-                metric_quantities);
-
-        // we zero out potential outflow
-        DataVector integrand = new_rho * new_lf * detsqrtsm *
-                               (lapse * get<0>(new_v) - get<0>(shift));
-        for (size_t i = 0; i < integrand.size(); i++) {
-          if (integrand[i] > 0) {
-            integrand[i] = 0;
-          }
-        }
-        const double mdot_contribution =
-            definite_integral(integrand * new_det_jacobian, new_mesh);
+        // newer integration are done by
+        // computing the integrand outside
+        // and then integrating the interpolated integrand
+        const double mdot_contribution = definite_integral(
+            mdot_integrand_interpolated * det_jacobian_interpolated, new_mesh);
         mdot += mdot_contribution;
 
-        // magnetic flux
-        // 1/2 integral *F^(tr) sqrt(-g) dphi dtheta
-        // note B^r = alpha * (*F^(tr)) and sqrt(-g) = alpha * gamma
-        // so we only need gamma * B^r
-        DataVector magnetic_flux_integrand = detsqrtsm * abs(get<0>(new_b));
-        const double magnetic_flux_contribution =
-            0.5 * definite_integral(magnetic_flux_integrand * new_det_jacobian,
-                                    new_mesh);
-        magnetic_flux += magnetic_flux_contribution;
-
-        const auto spacetime_metric = gr::spacetime_metric(
-            Scalar<DataVector>{lapse}, shift, spatial_metric);
-        // Ldot: T^r_phi
-        tnsr::AA<DataVector, 3, Frame::Inertial> stress_energy_tensor_v{};
-        hydro::stress_energy_tensor(
-            make_not_null(&stress_energy_tensor_v), Scalar<DataVector>{new_rho},
-            Scalar<DataVector>{new_energy}, Scalar<DataVector>{new_pressure},
-            Scalar<DataVector>{new_lf}, Scalar<DataVector>{lapse},
-            Scalar<DataVector>{new_bm}, new_v, shift, new_b, spatial_metric,
-            inverse_spatial_metric);
-
-        DataVector ldot_integrand =
-            detsqrtsm * lapse *
-            ((get<1, 0>(stress_energy_tensor_v) * get<0, 3>(spacetime_metric)) +
-             (get<1, 1>(stress_energy_tensor_v) * get<1, 3>(spacetime_metric)) +
-             (get<1, 2>(stress_energy_tensor_v) * get<2, 3>(spacetime_metric)) +
-             (get<1, 3>(stress_energy_tensor_v) * get<3, 3>(spacetime_metric)));
-        const double ldot_contribution =
-            definite_integral(ldot_integrand * new_det_jacobian, new_mesh);
-        ldot += ldot_contribution;
-
-        DataVector edot_integrand =
-            detsqrtsm * lapse *
-            ((get<1, 0>(stress_energy_tensor_v) * get<0, 0>(spacetime_metric)) +
-             (get<1, 1>(stress_energy_tensor_v) * get<1, 0>(spacetime_metric)) +
-             (get<1, 2>(stress_energy_tensor_v) * get<2, 0>(spacetime_metric)) +
-             (get<1, 3>(stress_energy_tensor_v) * get<3, 0>(spacetime_metric)));
-        const double edot_contribution =
-            definite_integral(edot_integrand * new_det_jacobian, new_mesh);
+        const double edot_contribution = definite_integral(
+            edot_integrand_interpolated * det_jacobian_interpolated, new_mesh);
         edot += edot_contribution;
 
+        const double ldot_contribution = definite_integral(
+            ldot_integrand_interpolated * det_jacobian_interpolated, new_mesh);
+        ldot += ldot_contribution;
+
+        const double phib_contribution = definite_integral(
+            phib_integrand_interpolated * det_jacobian_interpolated, new_mesh);
+        phib += phib_contribution;
       };
+
       const auto record_tensor_components =
           [&box, &record_tensor_component_impl,
            &variables_to_observe](const auto tensor_tag_v) {
@@ -489,11 +489,10 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
                                  subfile_path + ".dat"),
         Parallel::make_array_component_id<ParallelComponent>(element_id),
         subfile_path,
-        std::vector<std::string>{observation_value.name, "Mdot", "MagneticFlux",
-                                 "Edot", "Ldot", "SurfaceIntegral"},
-        ReductionData{observation_value.value, std::move(mdot),
-                      std::move(magnetic_flux), std::move(edot),
-                      std::move(ldot), std::move(surface_integral_value)});
+        std::vector<std::string>{observation_value.name, "mdot", "edot", "ldot",
+                                 "phib"},
+        ReductionData{observation_value.value, std::move(mdot), std::move(edot),
+                      std::move(ldot), std::move(phib)});
   }
 
   using observation_registration_tags = tmpl::list<::Tags::DataBox>;
