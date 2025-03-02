@@ -168,15 +168,8 @@
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
 #include "PointwiseFunctions/Hydro/InversePlasmaBeta.hpp"
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 #include "PointwiseFunctions/Hydro/LorentzFactor.hpp"
 #include "PointwiseFunctions/Hydro/MagneticFlux.hpp"
-    >>>>>>> c1fe45135(Add Edot and Ldot)
-=======
-#include "PointwiseFunctions/Hydro/MagneticFlux.hpp"
->>>>>>> 8f27cff13 (Add magnetic flux)
 #include "PointwiseFunctions/Hydro/MassFlux.hpp"
 #include "PointwiseFunctions/Hydro/QuadrupoleFormula.hpp"
 #include "PointwiseFunctions/Hydro/StressEnergy.hpp"
@@ -736,6 +729,7 @@ struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
           hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>,
       ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
           hydro::Tags::MagneticFlux<DataVector, 3, ::Frame::Inertial>,
+          ::Frame::Inertial>,
       ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Mdot<DataVector>,
                                                  ::Frame::Inertial>,
       ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Edot<DataVector>,
@@ -757,13 +751,6 @@ struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
       gr::Tags::SqrtDetSpatialMetric<DataVector>,
       gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
       gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>;
-  using vars_to_interpolate_to_target =
-      tmpl::list<hydro::Tags::RestMassDensity<DataVector>,
-                 hydro::Tags::SpatialVelocity<DataVector, 3>,
-                 hydro::Tags::MagneticField<DataVector, 3>,
-                 hydro::Tags::LorentzFactor<DataVector>,
-                 gr::Tags::Lapse<DataVector>, gr::Tags::Shift<DataVector, 3>,
-                 gr::Tags::SqrtDetSpatialMetric<DataVector>>;
   using compute_items_on_target = tmpl::push_front<
       tags_to_observe,
       ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
