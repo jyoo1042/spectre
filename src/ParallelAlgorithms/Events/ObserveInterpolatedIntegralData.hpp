@@ -84,6 +84,22 @@ using ObserveInterpolatedReductionData = Parallel::ReductionData<
     // Ldot
     Parallel::ReductionDatum<double, funcl::Plus<>>,
     // Phi_B
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Mdot new
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Edot new
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Ldot new
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Phi_B new
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Mdot grid point
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Edot grid point
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Ldot grid point
+    Parallel::ReductionDatum<double, funcl::Plus<>>,
+    // Phi_B grid point
     Parallel::ReductionDatum<double, funcl::Plus<>>>;
 }  // namespace detail
 /// \cond
@@ -254,6 +270,17 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
     double edot = 0.0;
     double ldot = 0.0;
     double phib = 0.0;
+    // computed by interpolating the ingredients and then computed
+    // and then integrated
+    double mdot_new = 0.0;
+    double edot_new = 0.0;
+    double ldot_new = 0.0;
+    double phib_new = 0.0;
+    // just integrating the values at grid point (slightly below horizon)
+    double mdot_grid = 0.0;
+    double edot_grid = 0.0;
+    double ldot_grid = 0.0;
+    double phib_grid = 0.0;
 
     const DataVector det_jacobian =
         1. /
@@ -297,46 +324,43 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
 
       // we need to convert the above target points in element logical frame
       // to inertial frame so that we can evaluate the metric quantities
-      //   auto ones =
-      //       make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
-      //           target_points, 1.0);
-      //   auto target_points_inertial =
-      //       make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
-      //           target_points, x0);
+      auto ones =
+          make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
+              target_points, 1.0);
+      auto target_points_inertial =
+          make_with_value<tnsr::I<DataVector, VolumeDim, Frame::Inertial>>(
+              target_points, x0);
 
-      //   get<1>(target_points_inertial) = y0;
-      //   get<2>(target_points_inertial) = z0;
-      //   for (size_t i = 0; i < VolumeDim; ++i) {
-      //     for (size_t j = 0; j < VolumeDim; ++j) {
-      //       target_points_inertial.get(i) +=
-      //           jac.get(i, j)[0] * (target_points.get(j) + ones.get(j));
-      //     }
-      //   }
-      //   using derived_classes =
-      //       tmpl::at<typename
-      //       Metavariables::factory_creation::factory_classes,
-      //                evolution::initial_data::InitialData>;
-      //   auto* initial_data_ptr =
-      //     &Parallel::get<evolution::initial_data::Tags::InitialData>(cache);
+      get<1>(target_points_inertial) = y0;
+      get<2>(target_points_inertial) = z0;
+      for (size_t i = 0; i < VolumeDim; ++i) {
+        for (size_t j = 0; j < VolumeDim; ++j) {
+          target_points_inertial.get(i) +=
+              jac.get(i, j)[0] * (target_points.get(j) + ones.get(j));
+        }
+      }
+      using derived_classes =
+          tmpl::at<typename Metavariables::factory_creation::factory_classes,
+                   evolution::initial_data::InitialData>;
+      auto* initial_data_ptr =
+          &Parallel::get<evolution::initial_data::Tags::InitialData>(cache);
       // all the metric related tags that we need for computing
       // MassAccretionRate: shift, lapse, sqrt_det_spatial_metric
-      //   using metric_tags = tmpl::list<
-      //       gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
-      //       gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
-      //       gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>,
-      //       gr::Tags::SqrtDetSpatialMetric<DataVector>,
-      //       gr::Tags::Lapse<DataVector>>;
-      //   using metric_tuples =
-      //   tuples::tagged_tuple_from_typelist<metric_tags>; auto
-      //   metric_quantities =
-      //       call_with_dynamic_type<metric_tuples, derived_classes>(
-      //           initial_data_ptr,
-      //          [&target_points_inertial](const auto* const data_or_solution)
-      //           {
-      //             return evolution::Initialization::initial_data(
-      //                 *data_or_solution, target_points_inertial, 0.0,
-      //                 metric_tags{});
-      //           });
+      using metric_tags = tmpl::list<
+          gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
+          gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
+          gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>,
+          gr::Tags::SqrtDetSpatialMetric<DataVector>,
+          gr::Tags::Lapse<DataVector>>;
+      using metric_tuples = tuples::tagged_tuple_from_typelist<metric_tags>;
+      auto metric_quantities =
+          call_with_dynamic_type<metric_tuples, derived_classes>(
+              initial_data_ptr,
+              [&target_points_inertial](const auto* const data_or_solution) {
+                return evolution::Initialization::initial_data(
+                    *data_or_solution, target_points_inertial, 0.0,
+                    metric_tags{});
+              });
 
       // get hydro stuffs from the box
       const auto& rho = get<hydro::Tags::RestMassDensity<DataVector>>(box);
@@ -364,34 +388,6 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
               box);
       const auto& gamma = get<gr::Tags::SqrtDetSpatialMetric<DataVector>>(box);
 
-      // need to compute lorentz factor, Bdotv, B^2, b^2
-      //   Scalar<DataVector> velocity_squared{};
-      //   tenex::evaluate<>(make_not_null(&velocity_squared),
-      //                     spatial_metric(ti::i, ti::j) *
-      //                     spatial_velocity(ti::I) *
-      //                         spatial_velocity(ti::J));
-      //   Scalar<DataVector> lorentz_factor{};
-      //   get(lorentz_factor) = 1.0 / sqrt(1.0 - get(velocity_squared));
-
-      //   Scalar<DataVector> B_dot_v;
-      //   tenex::evaluate<>(make_not_null(&B_dot_v), spatial_metric(ti::i,
-      //   ti::j) *
-      //                                               magnetic_field(ti::I)
-      //                                                  *
-      //                                             spatial_velocity(ti::J));
-
-      //   Scalar<DataVector> B_squared{};
-      //   tenex::evaluate<>(make_not_null(&B_squared),
-      //                     spatial_metric(ti::i, ti::j) *
-      //                     magnetic_field(ti::I) *
-      //                         magnetic_field(ti::J));
-
-      //   Scalar<DataVector> comoving_magnetic_field_magnitude{};
-      //   get(comoving_magnetic_field_magnitude) =
-      //       get(B_squared) / square(get(lorentz_factor)) + get(B_dot_v);
-      //   get(comoving_magnetic_field_magnitude) =
-      //       sqrt(get(comoving_magnetic_field_magnitude));
-
       tnsr::AA<DataVector, 3, Frame::Inertial> stress_energy_tensor_v{};
       hydro::stress_energy_tensor(make_not_null(&stress_energy_tensor_v), rho,
                                   energy, pressure, lorentz_factor, lapse,
@@ -417,44 +413,164 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
       const DataVector ldot_integrand =
           sqrt_g * get<1, 3>(lowered_stress_energy_tensor_v);
       const DataVector phib_integrand =
-          get(gamma) * abs(get<0>(magnetic_field));
-      const auto record_tensor_component_impl = [&interpolant, &mdot, &edot,
-                                                 &ldot, &phib, &new_mesh,
-                                                 &det_jacobian, &mdot_integrand,
-                                                 &edot_integrand,
-                                                 &ldot_integrand,
-                                                 &phib_integrand](
-                                                    const auto& tensor) {
-        const auto mdot_integrand_interpolated =
-            interpolant.interpolate(mdot_integrand);
-        const auto edot_integrand_interpolated =
-            interpolant.interpolate(edot_integrand);
-        const auto ldot_integrand_interpolated =
-            interpolant.interpolate(ldot_integrand);
-        const auto phib_integrand_interpolated =
-            interpolant.interpolate(phib_integrand);
-        const auto det_jacobian_interpolated =
-            interpolant.interpolate(det_jacobian);
+          0.5 * get(gamma) * abs(get<0>(magnetic_field));
+      const auto record_tensor_component_impl =
+          [&interpolant, &mdot, &edot, &ldot, &phib, &mdot_new, &edot_new,
+           &ldot_new, &phib_new, &mdot_grid, &edot_grid, &ldot_grid, &phib_grid,
+           &new_mesh, &det_jacobian, &mdot_integrand, &edot_integrand,
+           &ldot_integrand, &phib_integrand, &rho, &energy, &pressure,
+           &lorentz_factor, &comoving_magnetic_field_magnitude,
+           &spatial_velocity, &magnetic_field,
+           &metric_quantities](const auto& tensor) {
+            // method#1:
+            // interpolate the integrand and then interpolate
+            // mdot, edot, ldot, phib
+            const auto mdot_integrand_interpolated =
+                interpolant.interpolate(mdot_integrand);
+            const auto edot_integrand_interpolated =
+                interpolant.interpolate(edot_integrand);
+            const auto ldot_integrand_interpolated =
+                interpolant.interpolate(ldot_integrand);
+            const auto phib_integrand_interpolated =
+                interpolant.interpolate(phib_integrand);
+            const auto det_jacobian_interpolated =
+                interpolant.interpolate(det_jacobian);
 
-        // newer integration are done by
-        // computing the integrand outside
-        // and then integrating the interpolated integrand
-        const double mdot_contribution = definite_integral(
-            mdot_integrand_interpolated * det_jacobian_interpolated, new_mesh);
-        mdot += mdot_contribution;
+            // newer integration are done by
+            // computing the integrand outside
+            // and then integrating the interpolated integrand
+            const double mdot_contribution = definite_integral(
+                mdot_integrand_interpolated * det_jacobian_interpolated,
+                new_mesh);
+            mdot += mdot_contribution;
 
-        const double edot_contribution = definite_integral(
-            edot_integrand_interpolated * det_jacobian_interpolated, new_mesh);
-        edot += edot_contribution;
+            const double edot_contribution = definite_integral(
+                edot_integrand_interpolated * det_jacobian_interpolated,
+                new_mesh);
+            edot += edot_contribution;
 
-        const double ldot_contribution = definite_integral(
-            ldot_integrand_interpolated * det_jacobian_interpolated, new_mesh);
-        ldot += ldot_contribution;
+            const double ldot_contribution = definite_integral(
+                ldot_integrand_interpolated * det_jacobian_interpolated,
+                new_mesh);
+            ldot += ldot_contribution;
 
-        const double phib_contribution = definite_integral(
-            phib_integrand_interpolated * det_jacobian_interpolated, new_mesh);
-        phib += phib_contribution;
-      };
+            const double phib_contribution = definite_integral(
+                phib_integrand_interpolated * det_jacobian_interpolated,
+                new_mesh);
+            phib += phib_contribution;
+            // end of method #1
+
+            // method#2:
+            // interpolate all hydro-variables, compute
+            // metric quantities at target point
+            // compute integrand here and then integrate.
+            const auto rho_interpolated = interpolant.interpolate(get(rho));
+            const auto energy_interpolated = interpolant.interpolate(get(rho));
+            const auto pressure_interpolated =
+                interpolant.interpolate(get(pressure));
+            const auto lorentz_factor_interpolated =
+                interpolant.interpolate(get(lorentz_factor));
+            const auto comoving_magnetic_field_magnitude_interpolated =
+                interpolant.interpolate(get(comoving_magnetic_field_magnitude));
+            tnsr::I<DataVector, 3, Frame::Inertial>
+                spatial_velocity_interpolated{};
+            tnsr::I<DataVector, 3, Frame::Inertial>
+                magnetic_field_interpolated{};
+            for (size_t i = 0; i < 3; ++i) {
+              spatial_velocity_interpolated.get(i) =
+                  interpolant.interpolate(spatial_velocity.get(i));
+              magnetic_field_interpolated.get(i) =
+                  interpolant.interpolate(magnetic_field.get(i));
+            }
+            const auto shift_tp =
+                (get<gr::Tags::Shift<DataVector, 3, Frame::Inertial>>(
+                    metric_quantities));
+            const auto lapse_tp =
+                get<gr::Tags::Lapse<DataVector>>(metric_quantities);
+            const auto gamma_tp =
+                get<gr::Tags::SqrtDetSpatialMetric<DataVector>>(
+                    metric_quantities);
+            const auto spatial_metric_tp =
+                get<gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>>(
+                    metric_quantities);
+            const auto inverse_spatial_metric_tp = get<
+                gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>(
+                metric_quantities);
+            const auto spacetime_metric_tp =
+                gr::spacetime_metric(lapse_tp, shift_tp, spatial_metric_tp);
+            tnsr::AA<DataVector, 3, Frame::Inertial> stress_energy_tensor_tp{};
+            hydro::stress_energy_tensor(
+                make_not_null(&stress_energy_tensor_tp), rho_interpolated,
+                energy_interpolated, pressure_interpolated,
+                lorentz_factor_interpolated, lapse_tp,
+                comoving_magnetic_field_magnitude_interpolated,
+                spatial_velocity_interpolated, shift_tp,
+                magnetic_field_interpolated, spatial_metric_tp,
+                inverse_spatial_metric_tp);
+            tnsr::Ab<DataVector, 3, Frame::Inertial>
+                lowered_stress_energy_tensor_tp{};
+            tenex::evaluate<ti::A, ti::c>(
+                make_not_null(&lowered_stress_energy_tensor_tp),
+                stress_energy_tensor_tp(ti::A, ti::B) *
+                    spacetime_metric_tp(ti::b, ti::c));
+            const DataVector sqrt_g_tp = get(lapse_tp) * get(gamma_tp);
+
+            const DataVector mdot_new_integrand =
+                get(rho_interpolated) * get(lorentz_factor_interpolated) *
+                get(gamma_tp) *
+                (get(lapse_tp) * get<0>(spatial_velocity_interpolated) *
+                 -get<0>(shift_tp));
+            const double mdot_new_contribution = definite_integral(
+                mdot_new_integrand * det_jacobian_interpolated, new_mesh);
+            mdot_new += mdot_new_contribution;
+
+            const DataVector edot_new_integrand =
+                sqrt_g_tp * get<1, 0>(lowered_stress_energy_tensor_tp);
+            const double edot_new_contribution = definite_integral(
+                edot_new_integrand * det_jacobian_interpolated, new_mesh);
+            edot_new += edot_new_contribution;
+
+            const DataVector ldot_new_integrand =
+                sqrt_g_tp * get<1, 3>(lowered_stress_energy_tensor_tp);
+            const double ldot_new_contribution = definite_integral(
+                ldot_new_integrand * det_jacobian_interpolated, new_mesh);
+            ldot_new += ldot_new_contribution;
+
+            const DataVector phib_new_integrand =
+                0.5 * get(gamma_tp) * abs(get<0>(magnetic_field_interpolated));
+            // end of method #2
+
+            // method #3: just use the grid point evaluation
+            // of the integrand passed in
+            // since we need the first radial slice
+            // first N components would suffice where N is the
+            // size of interpolated DataVectors
+            size_t num_pts = det_jacobian_interpolated.size();
+            DataVector mdot_grid_integrand{num_pts};
+            DataVector edot_grid_integrand{num_pts};
+            DataVector ldot_grid_integrand{num_pts};
+            DataVector phib_grid_integrand{num_pts};
+            for (size_t i = 0; i < num_pts; ++i) {
+              mdot_grid_integrand[i] = mdot_integrand[i];
+              edot_grid_integrand[i] = edot_integrand[i];
+              ldot_grid_integrand[i] = ldot_integrand[i];
+              phib_grid_integrand[i] = phib_integrand[i];
+            }
+
+            const double mdot_grid_contribution = definite_integral(
+                mdot_grid_contribution * det_jacobian_interpolated, new_mesh);
+            mdot_grid += mdot_grid_contribution;
+            const double edot_grid_contribution = definite_integral(
+                edot_grid_contribution * det_jacobian_interpolated, new_mesh);
+            edot_grid += edot_grid_contribution;
+            const double ldot_grid_contribution = definite_integral(
+                ldot_grid_contribution * det_jacobian_interpolated, new_mesh);
+            ldot_grid += ldot_grid_contribution;
+            const double phib_grid_contribution = definite_integral(
+                phib_grid_contribution * det_jacobian_interpolated, new_mesh);
+            phib_grid += phib_grid_contribution;
+            // end of method #3
+          };
 
       const auto record_tensor_components =
           [&box, &record_tensor_component_impl,
@@ -490,9 +606,15 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
         Parallel::make_array_component_id<ParallelComponent>(element_id),
         subfile_path,
         std::vector<std::string>{observation_value.name, "mdot", "edot", "ldot",
-                                 "phib"},
+                                 "phib", "mdot_new", "edot_new", "ldot_new",
+                                 "phib_new", "mdot_grid", "edot_grid",
+                                 "ldot_grid", "phib_grid"},
         ReductionData{observation_value.value, std::move(mdot), std::move(edot),
-                      std::move(ldot), std::move(phib)});
+                      std::move(ldot), std::move(phib), std::move(mdot_new),
+                      std::move(edot_new), std::move(ldot_new),
+                      std::move(phib_new), std::move(mdot_grid),
+                      std::move(edot_grid), std::move(ldot_grid),
+                      std::move(phib_grid)});
   }
 
   using observation_registration_tags = tmpl::list<::Tags::DataBox>;
