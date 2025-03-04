@@ -725,11 +725,11 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
 struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using temporal_id = ::Tags::Time;
   using tags_to_observe = tmpl::list<
-      ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
-          hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>,
-      ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
-          hydro::Tags::MagneticFlux<DataVector, 3, ::Frame::Inertial>,
-          ::Frame::Inertial>,
+      //   ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+      //       hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>,
+      //   ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+      //       hydro::Tags::MagneticFlux<DataVector, 3, ::Frame::Inertial>,
+      //       ::Frame::Inertial>,
       ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Mdot<DataVector>,
                                                  ::Frame::Inertial>,
       ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Edot<DataVector>,
@@ -738,33 +738,36 @@ struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
                                                  ::Frame::Inertial>,
       ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Bdot<DataVector>,
                                                  ::Frame::Inertial>>;
-  using vars_to_interpolate_to_target = tmpl::list<
-      hydro::Tags::RestMassDensity<DataVector>,
-      hydro::Tags::Pressure<DataVector>,
-      hydro::Tags::SpecificInternalEnergy<DataVector>,
-      hydro::Tags::SpatialVelocity<DataVector, 3, Frame::Inertial>,
-      hydro::Tags::MagneticField<DataVector, 3, Frame::Inertial>,
-      hydro::Tags::LorentzFactor<DataVector>,
-      hydro::Tags::ComovingMagneticFieldMagnitude<DataVector>,
-      gr::Tags::Lapse<DataVector>,
-      gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
-      gr::Tags::SqrtDetSpatialMetric<DataVector>,
-      gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
-      gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>;
+  using vars_to_interpolate_to_target =
+      tmpl::list<hydro::Tags::Mdot<DataVector>, hydro::Tags::Edot<DataVector>,
+                 hydro::Tags::Ldot<DataVector>, hydro::Tags::Bdot<DataVector>>;
+  //   hydro::Tags::RestMassDensity<DataVector>,
+  //   hydro::Tags::Pressure<DataVector>,
+  //   hydro::Tags::SpecificInternalEnergy<DataVector>,
+  //   hydro::Tags::SpatialVelocity<DataVector, 3, Frame::Inertial>,
+  //   hydro::Tags::MagneticField<DataVector, 3, Frame::Inertial>,
+  //   hydro::Tags::LorentzFactor<DataVector>,
+  //   hydro::Tags::ComovingMagneticFieldMagnitude<DataVector>,
+  //   gr::Tags::Lapse<DataVector>,
+  //   gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
+  //   gr::Tags::SqrtDetSpatialMetric<DataVector>,
+  //   gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
+  //   gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>;
   using compute_items_on_target = tmpl::push_front<
       tags_to_observe,
-      ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
-      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
-      hydro::Tags::MagneticFluxCompute<DataVector, 3, ::Frame::Inertial>,
-      hydro::Tags::StressEnergyTensorCompute<DataVector>,
-      hydro::Tags::EdotCompute<DataVector,
-                               intrp::Tags::AllCoords<::Frame::Inertial>>,
-      hydro::Tags::LdotCompute<DataVector,
-                               intrp::Tags::AllCoords<::Frame::Inertial>>,
-      hydro::Tags::MdotCompute<DataVector,
-                               intrp::Tags::AllCoords<::Frame::Inertial>>,
-      hydro::Tags::BdotCompute<DataVector,
-                               intrp::Tags::AllCoords<::Frame::Inertial>>>;
+      ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>>;
+  //   ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
+  //   hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
+  //   hydro::Tags::MagneticFluxCompute<DataVector, 3, ::Frame::Inertial>,
+  //   hydro::Tags::StressEnergyTensorCompute<DataVector>,
+  //   hydro::Tags::EdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>,
+  //   hydro::Tags::LdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>,
+  //   hydro::Tags::MdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>,
+  //   hydro::Tags::BdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>>;
   using compute_target_points =
       intrp::TargetPoints::Sphere<Sphere, ::Frame::Inertial>;
   using post_interpolation_callbacks = tmpl::list<
