@@ -94,19 +94,18 @@ DataVector minmod_interpolate(const DataVector& variable,
   const double second_coords = get<0>(logical_coords)[second_offset];
   const double third_coords = get<0>(logical_coords)[third_offset];
 
-  result = DataVector{size_of_slice};
-  first_slice = DataVector{size_of_slice};
-  second_slice = DataVector{size_of_slice};
-  third_slice = DataVector{size_of_slice};
+  DataVector result{size_of_slice};
+  DataVector first_slice{size_of_slice};
+  DataVector second_slice{size_of_slice};
+  DataVector third_slice{size_of_slice};
 
   for (size_t i = 0; i < size_of_slice; ++i) {
     first_slice[i] = variable[i];
     second_slice[i] = variable[second_offset + i];
     third_slice[i] = variable[third_offset + i];
 
-    const double delta_21 = variable[second_offset + i] - variable[i];
-    const double delta_32 =
-        variable[third_offset + i] - variable[second_offset + i];
+    const double delta_21 = second_slice[i] - first_slice[i];
+    const double delta_32 = third_slice[i] - second_slice[i];
     double slope = 0.0;  // initialize to 0 first.
 
     if (delta_21 * delta_32 > 0.0) {
