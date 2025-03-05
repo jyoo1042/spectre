@@ -72,6 +72,57 @@ struct Inertial;
 }  // namespace Frame
 /// \endcond
 
+namespace {
+// takes datavector and perform minmod using first three grid points
+// in the first direction.
+// takes the first three slices (orthogonal to first direction).
+// this assumes the targets coords lie between the three points
+template <size_t VolumeDim>
+DataVector minmod_interpolate(const DataVector& variable,
+                              const Mesh<VolumeDim> mesh,
+                              const size_t interp_dim,
+                              const double target_coords) {
+  const size_t size_of_slice =
+      mesh.slice_away(interp_dim).number_of_grid_points();
+
+  const size_t second_offset = size_of_slice;
+  const size_t third_offset = second_offset + size_of_slice;
+
+  const auto logical_coords = logical_coordinates(mesh);
+
+  const double first_coords = get<0>(logical_coords)[0];
+  const double second_coords = get<0>(logical_coords)[second_offset];
+  const double third_coords = get<0>(logical_coords)[third_offset];
+
+  result = DataVector{size_of_slice};
+  first_slice = DataVector{size_of_slice};
+  second_slice = DataVector{size_of_slice};
+  third_slice = DataVector{size_of_slice};
+
+  for (size_t i = 0; i < size_of_slice; ++i) {
+    first_slice[i] = variable[i];
+    second_slice[i] = variable[second_offset + i];
+    third_slice[i] = variable[third_offset + i];
+
+    const double delta_21 = variable[second_offset + i] - variable[i];
+    const double delta_32 =
+        variable[third_offset + i] - variable[second_offset + i];
+    double slope = 0.0;  // initialize to 0 first.
+
+    if (delta_21 * delta_32 > 0.0) {
+      if (abs(delta_21) < abs(delta_32)) {
+        slope = delta_21 / (second_coords - first_coords);
+      } else {
+        slope = delta_32 / (third_coords - second_coords);
+      }
+    }
+    result[i] = first_slice[i] + slope * (target_coords - first_coords);
+  }
+  return result;
+}
+
+}  // namespace
+
 namespace dg::Events {
 namespace detail {
 using ObserveInterpolatedReductionData = Parallel::ReductionData<
