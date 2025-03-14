@@ -64,6 +64,8 @@
 #include "Utilities/TMPL.hpp"
 #include "Utilities/TaggedTuple.hpp"
 #include "Utilities/TypeTraits/IsA.hpp"
+
+#include "Utilities/ErrorHandling/CaptureForError.hpp"
 /// \cond
 template <size_t Dim>
 class Mesh;
@@ -77,49 +79,49 @@ namespace {
 // in the first direction.
 // takes the first three slices (orthogonal to first direction).
 // this assumes the targets coords lie between the three points
+// I am hard coding such that interp dim is 0 for now.
 template <size_t VolumeDim>
 DataVector minmod_interpolate(const DataVector& variable,
                               const Mesh<VolumeDim> mesh,
-                              const size_t interp_dim,
                               const double target_coords) {
-  const size_t size_of_slice =
-      mesh.slice_away(interp_dim).number_of_grid_points();
-
-  const size_t second_offset = size_of_slice;
-  const size_t third_offset = second_offset + size_of_slice;
-
+  const size_t size_of_slice = mesh.slice_away(0).number_of_grid_points();
+  const Index<VolumeDim> extents_v = mesh.extents();
   const auto logical_coords = logical_coordinates(mesh);
 
+  // first three grid points in element logical coords
   const double first_coords = get<0>(logical_coords)[0];
-  const double second_coords = get<0>(logical_coords)[second_offset];
-  const double third_coords = get<0>(logical_coords)[third_offset];
+  const double second_coords = get<0>(logical_coords)[1];
+  const double third_coords = get<0>(logical_coords)[2];
 
+  // initialize a data vector or size.
   DataVector result{size_of_slice};
   DataVector first_slice{size_of_slice};
   DataVector second_slice{size_of_slice};
   DataVector third_slice{size_of_slice};
 
-  for (size_t i = 0; i < size_of_slice; ++i) {
-    first_slice[i] = variable[i];
-    second_slice[i] = variable[second_offset + i];
-    third_slice[i] = variable[third_offset + i];
+  for (size_t i = 0; i < extents_v[1]; ++i) {
+    for (size_t j = 0; j < extents_v[2]; ++j) {
+      size_t k = i + extents_v[1] * j;
+      first_slice[k] = variable[extents_v[0] * k];
+      second_slice[k] = variable[1 + extents_v[0] * k];
+      third_slice[k] = variable[2 + extents_v[0] * k];
 
-    const double delta_21 = second_slice[i] - first_slice[i];
-    const double delta_32 = third_slice[i] - second_slice[i];
-    double slope = 0.0;  // initialize to 0 first.
+      const double delta_21 = second_slice[k] - first_slice[k];
+      const double delta_32 = third_slice[k] - second_slice[k];
+      double slope = 0.0;  // initialize to 0 first.
 
-    if (delta_21 * delta_32 > 0.0) {
-      if (abs(delta_21) < abs(delta_32)) {
-        slope = delta_21 / (second_coords - first_coords);
-      } else {
-        slope = delta_32 / (third_coords - second_coords);
+      if (delta_21 * delta_32 > 0.0) {
+        if (abs(delta_21) < abs(delta_32)) {
+          slope = delta_21 / (second_coords - first_coords);
+        } else {
+          slope = delta_32 / (third_coords - second_coords);
+        }
       }
+      result[k] = first_slice[k] + slope * (target_coords - first_coords);
     }
-    result[i] = first_slice[i] + slope * (target_coords - first_coords);
   }
   return result;
 }
-
 }  // namespace
 
 namespace dg::Events {
@@ -135,13 +137,13 @@ using ObserveInterpolatedReductionData = Parallel::ReductionData<
     Parallel::ReductionDatum<double, funcl::Plus<>>,
     // Phi_B
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Mdot new
+    // Mdot min mod
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Edot new
+    // Edot min mod
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Ldot new
+    // Ldot min mod
     Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Phi_B new
+    // Phi_B min mod
     Parallel::ReductionDatum<double, funcl::Plus<>>,
     // Mdot grid point
     Parallel::ReductionDatum<double, funcl::Plus<>>,
@@ -320,13 +322,13 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
     double edot = 0.0;
     double ldot = 0.0;
     double phib = 0.0;
-    // computed by interpolating the ingredients and then computed
+    // computed by interpolating as a whole using minmod
     // and then integrated
     double mdot_new = 0.0;
     double edot_new = 0.0;
     double ldot_new = 0.0;
     double phib_new = 0.0;
-    // just integrating the values at grid point (slightly below horizon)
+    // just integrating the values at first grid point (slightly below horizon)
     double mdot_grid = 0.0;
     double edot_grid = 0.0;
     double ldot_grid = 0.0;
@@ -465,14 +467,13 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
           sqrt_g * get<1, 3>(lowered_stress_energy_tensor_v);
       const DataVector phib_integrand =
           0.5 * get(gamma) * abs(get<0>(magnetic_field));
+
       const auto record_tensor_component_impl =
-          [&interpolant, &mdot, &edot, &ldot, &phib, &mdot_new, &edot_new,
-           &ldot_new, &phib_new, &mdot_grid, &edot_grid, &ldot_grid, &phib_grid,
-           &new_mesh, &det_jacobian, &mdot_integrand, &edot_integrand,
-           &ldot_integrand, &phib_integrand, &rho, &energy, &pressure,
-           &lorentz_factor, &comoving_magnetic_field_magnitude,
-           &spatial_velocity, &magnetic_field,
-           &metric_quantities](const auto& tensor) {
+          [&interpolant, &elm_interp_val, &mesh, &new_mesh, &det_jacobian,
+           &mdot, &edot, &ldot, &phib, &mdot_new, &edot_new, &ldot_new,
+           &phib_new, &mdot_grid, &edot_grid, &ldot_grid, &phib_grid,
+           &mdot_integrand, &edot_integrand, &ldot_integrand,
+           &phib_integrand](const auto& tensor) {
             // method#1:
             // interpolate the integrand and then interpolate
             // mdot, edot, ldot, phib
@@ -512,89 +513,31 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
             // end of method #1
 
             // method#2:
-            // interpolate all hydro-variables, compute
-            // metric quantities at target point
-            // compute integrand here and then integrate.
-            const auto rho_interpolated = interpolant.interpolate(get(rho));
-            const auto energy_interpolated =
-                interpolant.interpolate(get(energy));
-            const auto pressure_interpolated =
-                interpolant.interpolate(get(pressure));
-            const auto lorentz_factor_interpolated =
-                interpolant.interpolate(get(lorentz_factor));
-            const auto comoving_magnetic_field_magnitude_interpolated =
-                interpolant.interpolate(get(comoving_magnetic_field_magnitude));
-            tnsr::I<DataVector, 3, Frame::Inertial>
-                spatial_velocity_interpolated{};
-            tnsr::I<DataVector, 3, Frame::Inertial>
-                magnetic_field_interpolated{};
-            for (size_t i = 0; i < 3; ++i) {
-              spatial_velocity_interpolated.get(i) =
-                  interpolant.interpolate(spatial_velocity.get(i));
-              magnetic_field_interpolated.get(i) =
-                  interpolant.interpolate(magnetic_field.get(i));
-            }
-            const auto& shift_tp =
-                get<gr::Tags::Shift<DataVector, 3, Frame::Inertial>>(
-                    metric_quantities);
-            const auto& lapse_tp =
-                get<gr::Tags::Lapse<DataVector>>(metric_quantities);
-            const auto& gamma_tp =
-                get<gr::Tags::SqrtDetSpatialMetric<DataVector>>(
-                    metric_quantities);
-            const auto& spatial_metric_tp =
-                get<gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>>(
-                    metric_quantities);
-            const auto& inverse_spatial_metric_tp = get<
-                gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>(
-                metric_quantities);
-            const auto& spacetime_metric_tp =
-                gr::spacetime_metric(lapse_tp, shift_tp, spatial_metric_tp);
-            tnsr::AA<DataVector, 3, Frame::Inertial> stress_energy_tensor_tp{};
-            hydro::stress_energy_tensor(
-                make_not_null(&stress_energy_tensor_tp),
-                Scalar<DataVector>{rho_interpolated},
-                Scalar<DataVector>{energy_interpolated},
-                Scalar<DataVector>{pressure_interpolated},
-                Scalar<DataVector>{lorentz_factor_interpolated}, lapse_tp,
-                Scalar<DataVector>{
-                    comoving_magnetic_field_magnitude_interpolated},
-                spatial_velocity_interpolated, shift_tp,
-                magnetic_field_interpolated, spatial_metric_tp,
-                inverse_spatial_metric_tp);
-            tnsr::Ab<DataVector, 3, Frame::Inertial>
-                lowered_stress_energy_tensor_tp{};
-            tenex::evaluate<ti::A, ti::c>(
-                make_not_null(&lowered_stress_energy_tensor_tp),
-                stress_energy_tensor_tp(ti::A, ti::B) *
-                    spacetime_metric_tp(ti::b, ti::c));
-            const DataVector sqrt_g_tp = get(lapse_tp) * get(gamma_tp);
-
-            const DataVector mdot_new_integrand =
-                rho_interpolated * lorentz_factor_interpolated * get(gamma_tp) *
-                (get(lapse_tp) * get<0>(spatial_velocity_interpolated) *
-                 -get<0>(shift_tp));
+            // interpolate the integrand using minmod
+            // and then integrate
+            const auto mdot_integrand_minmod =
+                minmod_interpolate(mdot_integrand, mesh, elm_interp_val);
             const double mdot_new_contribution = definite_integral(
-                mdot_new_integrand * det_jacobian_interpolated, new_mesh);
+                mdot_integrand_minmod * det_jacobian_interpolated, new_mesh);
             mdot_new += mdot_new_contribution;
 
-            const DataVector edot_new_integrand =
-                sqrt_g_tp * get<1, 0>(lowered_stress_energy_tensor_tp);
+            const auto edot_integrand_minmod =
+                minmod_interpolate(edot_integrand, mesh, elm_interp_val);
             const double edot_new_contribution = definite_integral(
-                edot_new_integrand * det_jacobian_interpolated, new_mesh);
+                edot_integrand_minmod * det_jacobian_interpolated, new_mesh);
             edot_new += edot_new_contribution;
 
-            const DataVector ldot_new_integrand =
-                sqrt_g_tp * get<1, 3>(lowered_stress_energy_tensor_tp);
+            const auto ldot_integrand_minmod =
+                minmod_interpolate(ldot_integrand, mesh, elm_interp_val);
             const double ldot_new_contribution = definite_integral(
-                ldot_new_integrand * det_jacobian_interpolated, new_mesh);
+                ldot_integrand_minmod * det_jacobian_interpolated, new_mesh);
             ldot_new += ldot_new_contribution;
 
-            const DataVector phib_new_integrand =
-                0.5 * get(gamma_tp) * abs(get<0>(magnetic_field_interpolated));
-            const double phi_new_contribution = definite_integral(
-                phib_new_integrand * det_jacobian_interpolated, new_mesh);
-            phib_new += phi_new_contribution;
+            const auto phib_integrand_minmod =
+                minmod_interpolate(phib_integrand, mesh, elm_interp_val);
+            const double phib_new_contribution = definite_integral(
+                phib_integrand_minmod * det_jacobian_interpolated, new_mesh);
+            phib_new += phib_new_contribution;
             // end of method #2
 
             // method #3: just use the grid point evaluation
@@ -602,16 +545,20 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
             // since we need the first radial slice
             // first N components would suffice where N is the
             // size of interpolated DataVectors
-            size_t num_pts = det_jacobian_interpolated.size();
+            const size_t num_pts = det_jacobian_interpolated.size();
+            const Index<3> extents_v = mesh.extents();
             DataVector mdot_grid_integrand{num_pts};
             DataVector edot_grid_integrand{num_pts};
             DataVector ldot_grid_integrand{num_pts};
             DataVector phib_grid_integrand{num_pts};
-            for (size_t i = 0; i < num_pts; ++i) {
-              mdot_grid_integrand[i] = mdot_integrand[i];
-              edot_grid_integrand[i] = edot_integrand[i];
-              ldot_grid_integrand[i] = ldot_integrand[i];
-              phib_grid_integrand[i] = phib_integrand[i];
+            for (size_t i = 0; i < extents_v[1]; ++i) {
+              for (size_t j = 0; j < extents_v[2]; ++j) {
+                size_t k = i + extents_v[1] * j;
+                mdot_grid_integrand[k] = mdot_integrand[extents_v[0] * k];
+                edot_grid_integrand[k] = edot_integrand[extents_v[0] * k];
+                ldot_grid_integrand[k] = ldot_integrand[extents_v[0] * k];
+                phib_grid_integrand[k] = phib_integrand[extents_v[0] * k];
+              }
             }
 
             const double mdot_grid_contribution = definite_integral(
