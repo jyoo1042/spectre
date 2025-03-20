@@ -571,66 +571,78 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
   // spatial velocity. To do this, we follow what's commonly referred to as the
   // drift frame flooring.
 
-  double velocity_squared = 0.0;
-  for (size_t j = 0; j < Dim; ++j) {
-    velocity_squared += spatial_velocity->get(j)[grid_index] *
-                        spatial_velocity->get(j)[grid_index] *
-                        spatial_metric.get(j, j)[grid_index];
-    for (size_t k = j + 1; k < Dim; ++k) {
-      velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
-                          spatial_velocity->get(k)[grid_index] *
-                          spatial_metric.get(j, k)[grid_index];
-    }
-  }
+  // double velocity_squared = 0.0;
+  // for (size_t j = 0; j < Dim; ++j) {
+  //   velocity_squared += spatial_velocity->get(j)[grid_index] *
+  //                       spatial_velocity->get(j)[grid_index] *
+  //                       spatial_metric.get(j, j)[grid_index];
+  //   for (size_t k = j + 1; k < Dim; ++k) {
+  //     velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
+  //                         spatial_velocity->get(k)[grid_index] *
+  //                         spatial_metric.get(j, k)[grid_index];
+  //   }
+  // }
 
   // compute rest mass density * specific enthalpy
-  const double new_wg = get(*rest_mass_density)[grid_index] +
-                        get(*rest_mass_density)[grid_index] *
-                            get(*specific_internal_energy)[grid_index] +
-                        get(*pressure)[grid_index];
+  // const double new_wg = get(*rest_mass_density)[grid_index] +
+  //                       get(*rest_mass_density)[grid_index] *
+  //                           get(*specific_internal_energy)[grid_index] +
+  //                       get(*pressure)[grid_index];
+  // CAPTURE_FOR_ERROR(velocity_squared);
 
   // We only need to do this if non-zero velocity and if rest mass density
   // times specific enthalpy has been increased.
   // The latter should be always true the way that we applied flooring but
   // we do this for sanity check.
-  if (velocity_squared > 1.e-15 && new_wg > old_wg) {
-    const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
-    const double v_parallel = magnetic_field_dot_v / magnetic_field_magnitude;
-    const double lorentz_factor_v = get(*lorentz_factor)[grid_index];
-    const double lorentz_factor_perp =
-        1.0 / sqrt(square(v_parallel) + (1.0 / (square(lorentz_factor_v))));
-    const double x =
-        (2 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
-        (old_wg / new_wg);
+  // if (velocity_squared > 1.e-15 && new_wg > old_wg) {
+  //   const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
+  //   const double v_parallel = magnetic_field_dot_v /
+  //   magnetic_field_magnitude; const double lorentz_factor_v =
+  //   get(*lorentz_factor)[grid_index]; const double lorentz_factor_perp =
+  //       1.0 / sqrt(square(v_parallel) + (1.0 / (square(lorentz_factor_v))));
+  //   CAPTURE_FOR_ERROR(magnetic_field_magnitude);
+  //   CAPTURE_FOR_ERROR(v_parallel);
+  //   CAPTURE_FOR_ERROR(lorentz_factor_v);
+  //   CAPTURE_FOR_ERROR(lorentz_factor_perp);
+  // const double x =
+  //     (2 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
+  //     (old_wg / new_wg);
 
-    const double new_v_parallel =
-        (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
+  // CAPTURE_FOR_ERROR(magnetic_field_dot_v);
+  // CAPTURE_FOR_ERROR(x);
 
-    if (abs(new_v_parallel) > abs(v_parallel)) {
-      ERROR(
-          "the parallel component of the velocity is increased "
-          "instead of being reduced!!");
-    }
-    // readjust the spatial velocity
-    for (size_t j = 0; j < Dim; ++j) {
-      spatial_velocity->get(j)[grid_index] +=
-          (new_v_parallel - v_parallel) * magnetic_field.get(j)[grid_index] /
-          magnetic_field_magnitude;
-    }
-    double new_velocity_squared = 0.0;
-    for (size_t j = 0; j < Dim; ++j) {
-      new_velocity_squared += spatial_velocity->get(j)[grid_index] *
-                              spatial_velocity->get(j)[grid_index] *
-                              spatial_metric.get(j, j)[grid_index];
-      for (size_t k = j + 1; k < Dim; ++k) {
-        new_velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
-                                spatial_velocity->get(k)[grid_index] *
-                                spatial_metric.get(j, k)[grid_index];
-      }
-    }
-    // readjust the loretnz_factor
-    get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
-  }
+  // const double new_v_parallel =
+  //     (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
+  // CAPTURE_FOR_ERROR(new_v_parallel);
+
+  // if (abs(new_v_parallel) > abs(v_parallel)) {
+  //   ERROR(
+  //       "the parallel component of the velocity is increased "
+  //       "instead of being reduced!!");
+  // }
+  // readjust the spatial velocity
+  // for (size_t j = 0; j < Dim; ++j) {
+  //   spatial_velocity->get(j)[grid_index] +=
+  //       (new_v_parallel - v_parallel) * magnetic_field.get(j)[grid_index] /
+  //       magnetic_field_magnitude;
+  // }
+  // double new_velocity_squared = 0.0;
+  // for (size_t j = 0; j < Dim; ++j) {
+  //   new_velocity_squared += spatial_velocity->get(j)[grid_index] *
+  //                           spatial_velocity->get(j)[grid_index] *
+  //                           spatial_metric.get(j, j)[grid_index];
+  //   for (size_t k = j + 1; k < Dim; ++k) {
+  //     new_velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
+  //                             spatial_velocity->get(k)[grid_index] *
+  //                             spatial_metric.get(j, k)[grid_index];
+  //   }
+  // }
+  // CAPTURE_FOR_ERROR(new_velocity_squared);
+  // // readjust the loretnz_factor
+  // get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
+  // const double new_lorentz_factor = get(*lorentz_factor)[grid_index];
+  // CAPTURE_FOR_ERROR(new_lorentz_factor);
+  // }
 }
 
 template <size_t Dim>
