@@ -148,7 +148,7 @@ FishboneMoncriefDisk::variables(
   const auto specific_enthalpy =
       get<hydro::Tags::SpecificEnthalpy<DataType>>(variables(
           x, tmpl::list<hydro::Tags::SpecificEnthalpy<DataType>>{}, vars));
-  auto rest_mass_density = make_with_value<Scalar<DataType>>(x, 0.0);
+  auto rest_mass_density = make_with_value<Scalar<DataType>>(x, 1.0e-7);
   variables_impl(vars, [&rest_mass_density, &specific_enthalpy, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(rest_mass_density), s) =
@@ -201,7 +201,7 @@ FishboneMoncriefDisk::variables(
   std::uniform_real_distribution<> dis(-noise_, noise_);
   const auto rest_mass_density = get<hydro::Tags::RestMassDensity<DataType>>(
       variables(x, tmpl::list<hydro::Tags::RestMassDensity<DataType>>{}, vars));
-  auto pressure = make_with_value<Scalar<DataType>>(x, 0.0);
+  auto pressure = make_with_value<Scalar<DataType>>(x, 2e-12);
   variables_impl(vars, [&pressure, &rest_mass_density, &gen, &dis, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(pressure), s) =
@@ -220,7 +220,7 @@ FishboneMoncriefDisk::variables(
     gsl::not_null<IntermediateVariables<DataType>*> vars) const {
   const auto rest_mass_density = get<hydro::Tags::RestMassDensity<DataType>>(
       variables(x, tmpl::list<hydro::Tags::RestMassDensity<DataType>>{}, vars));
-  auto specific_internal_energy = make_with_value<Scalar<DataType>>(x, 0.0);
+  auto specific_internal_energy = make_with_value<Scalar<DataType>>(x, 6.0e-5);
   variables_impl(vars, [&specific_internal_energy, &rest_mass_density, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(specific_internal_energy), s) =
@@ -243,7 +243,7 @@ FishboneMoncriefDisk::variables(
       get<hydro::Tags::SpecificInternalEnergy<DataType>>(variables(
           x, tmpl::list<hydro::Tags::SpecificInternalEnergy<DataType>>{},
           vars));
-  auto temperature = make_with_value<Scalar<DataType>>(x, 0.0);
+  auto temperature = make_with_value<Scalar<DataType>>(x, 2.e-5);
   variables_impl(vars, [&temperature, &specific_internal_energy, this](
                            const size_t s, const double /*potential_at_s*/) {
     get_element(get(temperature), s) =
