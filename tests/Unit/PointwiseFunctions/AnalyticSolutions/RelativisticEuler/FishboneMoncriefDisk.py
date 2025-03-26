@@ -3,6 +3,13 @@
 
 import numpy as np
 
+"""
+Background values (for density, temperature)
+For more details, check the comments in FishboneMoncriefDisk.hpp:432.
+"""
+background_density_ = 1.0e-7
+background_temperature_ = 2.0e-5
+
 
 def rho_max(
     bh_mass,
@@ -262,24 +269,28 @@ def rest_mass_density(
         polytropic_constant,
         polytropic_exponent,
     )
-    return (1 / rho_max_) * np.power(
-        (polytropic_exponent - 1.0)
-        * (
-            specific_enthalpy(
-                x,
-                t,
-                bh_mass,
-                bh_dimless_a,
-                dimless_r_in,
-                dimless_r_max,
-                polytropic_constant,
-                polytropic_exponent,
-                noise,
+    return max(
+        (1 / rho_max_)
+        * np.power(
+            (polytropic_exponent - 1.0)
+            * (
+                specific_enthalpy(
+                    x,
+                    t,
+                    bh_mass,
+                    bh_dimless_a,
+                    dimless_r_in,
+                    dimless_r_max,
+                    polytropic_constant,
+                    polytropic_exponent,
+                    noise,
+                )
+                - 1.0
             )
-            - 1.0
-        )
-        / (polytropic_exponent * polytropic_constant),
-        1.0 / (polytropic_exponent - 1.0),
+            / (polytropic_exponent * polytropic_constant),
+            1.0 / (polytropic_exponent - 1.0),
+        ),
+        background_density_,
     )
 
 
@@ -302,7 +313,7 @@ def specific_internal_energy(
         polytropic_constant,
         polytropic_exponent,
     )
-    return (
+    return max(
         polytropic_constant
         * np.power(
             rho_max_
@@ -319,7 +330,8 @@ def specific_internal_energy(
             ),
             polytropic_exponent - 1.0,
         )
-        / (polytropic_exponent - 1.0)
+        / (polytropic_exponent - 1.0),
+        background_temperature_ / (polytropic_exponent - 1.0),
     )
 
 
@@ -342,7 +354,7 @@ def pressure(
         polytropic_constant,
         polytropic_exponent,
     )
-    return (
+    return max(
         (1 / rho_max_)
         * polytropic_constant
         * np.power(
@@ -359,7 +371,8 @@ def pressure(
                 noise,
             ),
             polytropic_exponent,
-        )
+        ),
+        background_density_ * background_temperature_,
     )
 
 
