@@ -136,22 +136,6 @@ using ObserveInterpolatedReductionData = Parallel::ReductionData<
     // Ldot
     Parallel::ReductionDatum<double, funcl::Plus<>>,
     // Phi_B
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Mdot min mod
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Edot min mod
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Ldot min mod
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Phi_B min mod
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Mdot grid point
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Edot grid point
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Ldot grid point
-    Parallel::ReductionDatum<double, funcl::Plus<>>,
-    // Phi_B grid point
     Parallel::ReductionDatum<double, funcl::Plus<>>>;
 }  // namespace detail
 /// \cond
@@ -322,17 +306,6 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
     double edot = 0.0;
     double ldot = 0.0;
     double phib = 0.0;
-    // computed by interpolating as a whole using minmod
-    // and then integrated
-    double mdot_new = 0.0;
-    double edot_new = 0.0;
-    double ldot_new = 0.0;
-    double phib_new = 0.0;
-    // just integrating the values at first grid point (slightly below horizon)
-    double mdot_grid = 0.0;
-    double edot_grid = 0.0;
-    double ldot_grid = 0.0;
-    double phib_grid = 0.0;
 
     const DataVector det_jacobian =
         1. /
@@ -470,8 +443,7 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
 
       const auto record_tensor_component_impl =
           [&interpolant, &elm_interp_val, &mesh, &new_mesh, &det_jacobian,
-           &mdot, &edot, &ldot, &phib, &mdot_new, &edot_new, &ldot_new,
-           &phib_new, &mdot_grid, &edot_grid, &ldot_grid, &phib_grid,
+           &mdot, &edot, &ldot, &phib,
            &mdot_integrand, &edot_integrand, &ldot_integrand,
            &phib_integrand](const auto& tensor) {
             // method#1:
@@ -515,29 +487,29 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
             // method#2:
             // interpolate the integrand using minmod
             // and then integrate
-            const auto mdot_integrand_minmod =
-                minmod_interpolate(mdot_integrand, mesh, elm_interp_val);
-            const double mdot_new_contribution = definite_integral(
-                mdot_integrand_minmod * det_jacobian_interpolated, new_mesh);
-            mdot_new += mdot_new_contribution;
+            // const auto mdot_integrand_minmod =
+            //     minmod_interpolate(mdot_integrand, mesh, elm_interp_val);
+            // const double mdot_new_contribution = definite_integral(
+            //     mdot_integrand_minmod * det_jacobian_interpolated, new_mesh);
+            // mdot_new += mdot_new_contribution;
 
-            const auto edot_integrand_minmod =
-                minmod_interpolate(edot_integrand, mesh, elm_interp_val);
-            const double edot_new_contribution = definite_integral(
-                edot_integrand_minmod * det_jacobian_interpolated, new_mesh);
-            edot_new += edot_new_contribution;
+            // const auto edot_integrand_minmod =
+            //     minmod_interpolate(edot_integrand, mesh, elm_interp_val);
+            // const double edot_new_contribution = definite_integral(
+            //     edot_integrand_minmod * det_jacobian_interpolated, new_mesh);
+            // edot_new += edot_new_contribution;
 
-            const auto ldot_integrand_minmod =
-                minmod_interpolate(ldot_integrand, mesh, elm_interp_val);
-            const double ldot_new_contribution = definite_integral(
-                ldot_integrand_minmod * det_jacobian_interpolated, new_mesh);
-            ldot_new += ldot_new_contribution;
+            // const auto ldot_integrand_minmod =
+            //     minmod_interpolate(ldot_integrand, mesh, elm_interp_val);
+            // const double ldot_new_contribution = definite_integral(
+            //     ldot_integrand_minmod * det_jacobian_interpolated, new_mesh);
+            // ldot_new += ldot_new_contribution;
 
-            const auto phib_integrand_minmod =
-                minmod_interpolate(phib_integrand, mesh, elm_interp_val);
-            const double phib_new_contribution = definite_integral(
-                phib_integrand_minmod * det_jacobian_interpolated, new_mesh);
-            phib_new += phib_new_contribution;
+            // const auto phib_integrand_minmod =
+            //     minmod_interpolate(phib_integrand, mesh, elm_interp_val);
+            // const double phib_new_contribution = definite_integral(
+            //     phib_integrand_minmod * det_jacobian_interpolated, new_mesh);
+            // phib_new += phib_new_contribution;
             // end of method #2
 
             // method #3: just use the grid point evaluation
@@ -545,34 +517,34 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
             // since we need the first radial slice
             // first N components would suffice where N is the
             // size of interpolated DataVectors
-            const size_t num_pts = det_jacobian_interpolated.size();
-            const Index<3> extents_v = mesh.extents();
-            DataVector mdot_grid_integrand{num_pts};
-            DataVector edot_grid_integrand{num_pts};
-            DataVector ldot_grid_integrand{num_pts};
-            DataVector phib_grid_integrand{num_pts};
-            for (size_t i = 0; i < extents_v[1]; ++i) {
-              for (size_t j = 0; j < extents_v[2]; ++j) {
-                size_t k = i + extents_v[1] * j;
-                mdot_grid_integrand[k] = mdot_integrand[extents_v[0] * k];
-                edot_grid_integrand[k] = edot_integrand[extents_v[0] * k];
-                ldot_grid_integrand[k] = ldot_integrand[extents_v[0] * k];
-                phib_grid_integrand[k] = phib_integrand[extents_v[0] * k];
-              }
-            }
+            // const size_t num_pts = det_jacobian_interpolated.size();
+            // const Index<3> extents_v = mesh.extents();
+            // DataVector mdot_grid_integrand{num_pts};
+            // DataVector edot_grid_integrand{num_pts};
+            // DataVector ldot_grid_integrand{num_pts};
+            // DataVector phib_grid_integrand{num_pts};
+            // for (size_t i = 0; i < extents_v[1]; ++i) {
+            //   for (size_t j = 0; j < extents_v[2]; ++j) {
+            //     size_t k = i + extents_v[1] * j;
+            //     mdot_grid_integrand[k] = mdot_integrand[extents_v[0] * k];
+            //     edot_grid_integrand[k] = edot_integrand[extents_v[0] * k];
+            //     ldot_grid_integrand[k] = ldot_integrand[extents_v[0] * k];
+            //     phib_grid_integrand[k] = phib_integrand[extents_v[0] * k];
+            //   }
+            // }
 
-            const double mdot_grid_contribution = definite_integral(
-                mdot_grid_integrand * det_jacobian_interpolated, new_mesh);
-            mdot_grid += mdot_grid_contribution;
-            const double edot_grid_contribution = definite_integral(
-                edot_grid_integrand * det_jacobian_interpolated, new_mesh);
-            edot_grid += edot_grid_contribution;
-            const double ldot_grid_contribution = definite_integral(
-                ldot_grid_integrand * det_jacobian_interpolated, new_mesh);
-            ldot_grid += ldot_grid_contribution;
-            const double phib_grid_contribution = definite_integral(
-                phib_grid_integrand * det_jacobian_interpolated, new_mesh);
-            phib_grid += phib_grid_contribution;
+            // const double mdot_grid_contribution = definite_integral(
+            //     mdot_grid_integrand * det_jacobian_interpolated, new_mesh);
+            // mdot_grid += mdot_grid_contribution;
+            // const double edot_grid_contribution = definite_integral(
+            //     edot_grid_integrand * det_jacobian_interpolated, new_mesh);
+            // edot_grid += edot_grid_contribution;
+            // const double ldot_grid_contribution = definite_integral(
+            //     ldot_grid_integrand * det_jacobian_interpolated, new_mesh);
+            // ldot_grid += ldot_grid_contribution;
+            // const double phib_grid_contribution = definite_integral(
+            //     phib_grid_integrand * det_jacobian_interpolated, new_mesh);
+            // phib_grid += phib_grid_contribution;
             // end of method #3
           };
 
@@ -610,15 +582,9 @@ class ObserveInterpolatedIntegralData<VolumeDim, tmpl::list<Tensors...>,
         Parallel::make_array_component_id<ParallelComponent>(element_id),
         subfile_path,
         std::vector<std::string>{observation_value.name, "mdot", "edot", "ldot",
-                                 "phib", "mdot_new", "edot_new", "ldot_new",
-                                 "phib_new", "mdot_grid", "edot_grid",
-                                 "ldot_grid", "phib_grid"},
+                                 "phib"},
         ReductionData{observation_value.value, std::move(mdot), std::move(edot),
-                      std::move(ldot), std::move(phib), std::move(mdot_new),
-                      std::move(edot_new), std::move(ldot_new),
-                      std::move(phib_new), std::move(mdot_grid),
-                      std::move(edot_grid), std::move(ldot_grid),
-                      std::move(phib_grid)});
+                      std::move(ldot), std::move(phib)});
   }
 
   using observation_registration_tags = tmpl::list<::Tags::DataBox>;
