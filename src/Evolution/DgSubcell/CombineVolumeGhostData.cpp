@@ -42,6 +42,10 @@ Index<3> expanded_index(size_t index, const Index<3>& extents) {
   return Index<3>{{ix, iy, iz}};
 }
 
+// note I can eliminate the subtractions
+// because they should be rounded off.
+// but for now, let us just leave as is.
+
 template <size_t Dim>
 void sort_copy_data(gsl::not_null<DataVector*> extended_subcell_vars,
                     const DataVector& volume_subcell_vars,
@@ -53,14 +57,12 @@ void sort_copy_data(gsl::not_null<DataVector*> extended_subcell_vars,
                     const Index<Dim>& ghost_extents,
                     const Direction<Dim>& direction_to_extend) {
   bool lower_side = (direction_to_extend.side() == Side::Lower);
+  const size_t extended_dimension = direction_to_extend.dimension();
+
   for (size_t nv = 0; nv < volume_extents.product(); ++nv) {
     Index<Dim> tmp_idx = expanded_index(nv, volume_extents);
-    for (size_t d = 0; d < Dim; ++d) {
-      if (d == direction_to_extend.dimension()) {
-        if (lower_side) {
-          tmp_idx[d] += ghost_extents[d];
-        }
-      }
+    if (lower_side) {
+      tmp_idx[extended_dimension] += ghost_extents[extended_dimension];
     }
     size_t ne = collapsed_index(tmp_idx, extended_extents);
     (*extended_subcell_vars)[ne + component_offset_ext] =
@@ -69,12 +71,8 @@ void sort_copy_data(gsl::not_null<DataVector*> extended_subcell_vars,
 
   for (size_t ng = 0; ng < ghost_extents.product(); ++ng) {
     Index<Dim> tmp_idx = expanded_index(ng, ghost_extents);
-    for (size_t d = 0; d < Dim; ++d) {
-      if (d == direction_to_extend.dimension()) {
-        if (!lower_side) {
-          tmp_idx[d] += volume_extents[d];
-        }
-      }
+    if (!lower_side) {
+      tmp_idx[extended_dimension] += volume_extents[extended_dimension];
     }
     size_t ne = collapsed_index(tmp_idx, extended_extents);
     (*extended_subcell_vars)[ne + component_offset_ext] =
@@ -92,27 +90,18 @@ DataVector combine_data(const DataVector& volume_subcell_vars,
   // number of original volume subcell points and number of components
   const size_t num_vol_pts = subcell_extents.product();
   const size_t number_of_components = volume_subcell_vars.size() / num_vol_pts;
+  const size_t extended_dimension = direction_to_extend.dimension();
 
-  // ghost extents
   Index<Dim> ghost_extents{0};
+  Index<Dim> extended_extents{0};
   for (size_t d = 0; d < Dim; ++d) {
-    if (d == direction_to_extend.dimension()) {
-      ghost_extents[d] = ghost_zone_size;
-    } else {
-      ghost_extents[d] = subcell_extents[d];
-    }
+    ghost_extents[d] =
+        (d == extended_dimension) ? ghost_zone_size : subcell_extents[d];
+    extended_extents[d] = (d == extended_dimension)
+                              ? subcell_extents[d] + ghost_zone_size
+                              : subcell_extents[d];
   }
   const size_t num_gho_pts = ghost_extents.product();
-
-  // new extended extents
-  Index<Dim> extended_extents{static_cast<size_t>(0)};
-  for (size_t d = 0; d < Dim; ++d) {
-    if (d == direction_to_extend.dimension()) {
-      extended_extents[d] = subcell_extents[d] + ghost_zone_size;
-    } else {
-      extended_extents[d] = subcell_extents[d];
-    }
-  }
   const size_t num_ext_pts = extended_extents.product();
 
   // create new extended size datavector should be
