@@ -188,46 +188,78 @@ struct SetInterpolators {
         // if they exceed past the extremal grid points of the element
         // aka leading to extrapolation.
         bool problemo = false;
-        Direction<Dim> direction_to_extend;
+        std::optional<Direction<Dim>> direction_to_extend;
 
-        for (size_t i = 0; i < neighbor_logical_ghost_zone_coords[0].size();
-             ++i) {
-          for (size_t d = 0; d < Dim; ++d) {
-            double ext = 1 - (1 / my_fd_mesh.extents(d));
-            if (std::abs(neighbor_logical_ghost_zone_coords.get(d)[i]) > ext) {
+        for (size_t d = 0; d < Dim; ++d) {
+          // small epsilon of 1e-10 used to ensure we are not unncessarily
+          // flagging as problematic
+          double ext = 1. - (1. / my_fd_mesh.extents(d)) + 1.e-10;
+          const auto& coords = neighbor_logical_ghost_zone_coords.get(d);
+
+          for (size_t i = 0; i < coords.size(); ++i) {
+            if (std::abs(coords[i]) > ext) {
               problemo = true;
-              if ((neighbor_logical_ghost_zone_coords.get(d)[i]) > 0) {
-                direction_to_extend = Direction<Dim>{d, Side::Upper};
-              } else {
-                direction_to_extend = Direction<Dim>{d, Side::Lower};
+              Direction<Dim> new_direction =
+                  Direction<Dim>{d, coords[i] > 0 ? Side::Upper : Side::Lower};
+
+              if (!direction_to_extend.has_value()) {
+                direction_to_extend = new_direction;
+              } else if (direction_to_extend.value() != new_direction) {
+                ERROR("Multiple directions to extend: existing = "
+                      << direction_to_extend.value()
+                      << ", new = " << new_direction);
               }
+              break;  // no reason to check remaining coords.
             }
           }
         }
+
         if (problemo) {
-          auto new_neighbor_logical_ghost_zone_coords =
-              neighbor_logical_ghost_zone_coords;
+          if (!direction_to_extend.has_value()) {
+            ERROR(
+                "Should have direction to extend if flagged "
+                "as problematic!");
+          }
+
           auto new_basis = make_array<Dim>(my_fd_mesh.basis(0));
           auto new_extents = make_array<Dim>(my_fd_mesh.extents(0));
           auto new_quads = make_array<Dim>(my_fd_mesh.quadrature(0));
-          const size_t problematic_dim = direction_to_extend.dimension();
-          const double mf =
+
+          const size_t problematic_dim =
+              direction_to_extend.value().dimension();
+
+          // note we are extending our current volume by including its own ghost
+          // points in the problematic direction (direction to extend)
+          // which means the logical coordinates of the ghost (to be sent)
+          // must be transformed to accommodate the extended mesh in
+          // direction to extend.
+
+          const double rescale_factor =
               (my_fd_mesh.extents(problematic_dim)) /
               (my_fd_mesh.extents(problematic_dim) + number_of_ghost_zones);
-          const double af =
+          double translation =
               (number_of_ghost_zones) /
               (my_fd_mesh.extents(problematic_dim) + number_of_ghost_zones);
+          // translation above is based on extending to Upper Side.
+          if (direction_to_extend.value().side() == Side::Lower) {
+            translation *= -1.;
+          }
+          auto new_neighbor_logical_ghost_zone_coords =
+              neighbor_logical_ghost_zone_coords;
+          for (size_t i = 0;
+               i < new_neighbor_logical_ghost_zone_coords[0].size(); ++i) {
+            new_neighbor_logical_ghost_zone_coords.get(problematic_dim)[i] *=
+                rescale_factor;
+            new_neighbor_logical_ghost_zone_coords.get(problematic_dim)[i] -=
+                translation;
+          }
+
           for (size_t d = 0; d < Dim; ++d) {
             gsl::at(new_basis, d) = my_fd_mesh.basis(d);
             gsl::at(new_quads, d) = my_fd_mesh.quadrature(d);
             if (d == problematic_dim) {
               gsl::at(new_extents, d) =
                   my_fd_mesh.extents(d) + number_of_ghost_zones;
-              for (size_t i = 0;
-                   i < new_neighbor_logical_ghost_zone_coords[0].size(); ++i) {
-                new_neighbor_logical_ghost_zone_coords.get(d)[i] *= mf;
-                new_neighbor_logical_ghost_zone_coords.get(d)[i] -= af;
-              }
             } else {
               gsl::at(new_extents, d) = my_fd_mesh.extents(d);
             }
@@ -237,7 +269,8 @@ struct SetInterpolators {
               direction, neighbor_id}] = intrp::Irregular<Dim>{
               new_mesh, new_neighbor_logical_ghost_zone_coords};
           (*problemo_book_ptr)[direction] =
-              interpolators_detail::ProblemoBook<Dim>{direction_to_extend};
+              interpolators_detail::ProblemoBook<Dim>{
+                  direction_to_extend.value()};
         } else {
           (*interpolators_fd_to_neighbor_fd_ptr)[DirectionalId<Dim>{
               direction, neighbor_id}] = intrp::Irregular<Dim>{
