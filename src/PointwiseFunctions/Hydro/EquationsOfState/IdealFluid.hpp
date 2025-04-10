@@ -60,7 +60,7 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
     static type lower_bound() { return 0.0; }
     static constexpr Options::String help = {
         "Minimum temperature. "
-        "This value must be non-negative."};
+        "This value must not be greater than or equal to 0.0"};
   };
 
   static constexpr Options::String help = {
@@ -69,7 +69,7 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
       "(gamma - 1), where p is the pressure, rho is the rest mass density, "
       "epsilon is the specific internal energy, and gamma is the adiabatic "
       "index.\n"
-      "The temperature T is defined as T=(gamma-1) * epsilon."};
+      "The temperature T is defined as T=epsilon."};
 
   using options = tmpl::list<AdiabaticIndex, MinTemperature>;
 
@@ -113,10 +113,12 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
   /// The lower bound of the specific internal energy that is valid for this EOS
   /// at the given rest mass density \f$\rho\f$
   /// If non-zero lower bound for temperature is provided, then the lower bound
-  /// for specific internal energy is also non-zero accordingly.
+  /// for specific internal energy is also non-zero.
   double specific_internal_energy_lower_bound(
       const double /* rest_mass_density */) const override {
-    return (min_temperature_) / (adiabatic_index_ - 1.0);
+    return (min_temperature_ == 0.0)
+               ? 0.0
+               : (min_temperature_) / (adiabatic_index_ - 1.0);
   }
 
   /// The upper bound of the specific internal energy that is valid for this EOS
@@ -125,17 +127,12 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
       double rest_mass_density) const override;
 
   /// The lower bound of the specific enthalpy that is valid for this EOS
-  /// If non-zero lower bound for temperature is provided, then the lower bound
-  /// for specific internal enthalpy is also non-zero accordingly.
   double specific_enthalpy_lower_bound() const override {
-    return IsRelativistic ? 1.0 + (adiabatic_index_ * min_temperature_) /
-                                      (adiabatic_index_ - 1.0)
-                          : (adiabatic_index_ * min_temperature_) /
-                                (adiabatic_index_ - 1.0);
+    return IsRelativistic ? 1.0 : 0.0;
   }
 
   /// The lower bound of the temperature that is valid for this EOS.
-  /// Non-zero lower bound could be set to impose floor on the specific
+  /// Non-zero lower bound could be set to impose floor for the specific
   /// internal energy.
   double temperature_lower_bound() const override { return min_temperature_; }
 
