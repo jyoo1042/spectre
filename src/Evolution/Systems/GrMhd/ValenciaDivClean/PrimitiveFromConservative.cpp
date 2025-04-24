@@ -120,6 +120,10 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
   const double floorD =
       primitive_from_conservative_options.density_when_skipping_inversion();
 
+  // When using Kastaun, Lorentz factor is bounded above by this value.
+  const double kastaun_max_lorentz =
+      primitive_from_conservative_options.kastaun_max_lorentz_factor();
+
   // If the max over the grid is below the cutoff, then just don't do any
   // work because everything will get reset to atmosphere.
   if (max(get(tilde_d)) < cutoffD) {
@@ -277,6 +281,30 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
               coefficient_of_b * magnetic_field->get(i)[s] +
               coefficient_of_s * tilde_s_upper.get(i)[s];
         }
+        // if using Kastaun and Lorentz factor has been capped
+        // to KastaunMaxLorentzFactor, then TildeS is detached from
+        // LorentzFactor; thus spatial velocity must be rescaled to
+        // make it consistent with Lorentz factor.
+        if (abs(primitive_data.value().lorentz_factor - kastaun_max_lorentz) <
+            1.e-3) {
+          double velocity_squared = 0.0;
+          const double velocity_squared_new =
+              (square(primitive_data.value().lorentz_factor) - 1.0) /
+              square(primitive_data.value().lorentz_factor);
+
+          for (size_t i = 0; i < 3; ++i) {
+            for (size_t j = 0; j < 3; ++j) {
+              velocity_squared += spatial_velocity->get(i)[s] *
+                                  spatial_velocity->get(j)[s] *
+                                  spatial_metric.get(i, j)[s];
+            }
+          }
+          const double scaling_factor =
+              sqrt(velocity_squared_new / velocity_squared);
+          for (size_t k = 0; k < 3; ++k) {
+            spatial_velocity->get(k)[s] *= scaling_factor;
+          }
+        }
       }
       get(*lorentz_factor)[s] = primitive_data.value().lorentz_factor;
       get(*pressure)[s] = primitive_data.value().pressure;
@@ -307,6 +335,24 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
       } else {
         return false;
       }
+    }
+  }
+  // We re-use a temporary variable 'momentum_density_squared'
+  // to perform a consistency check on the Lorentz factor.
+  dot_product(make_not_null(&momentum_density_squared), *spatial_velocity,
+              *spatial_velocity, spatial_metric);
+  get(momentum_density_squared) = 1. / sqrt(1 - get(momentum_density_squared));
+  for (size_t s = 0; s < number_of_points; ++s) {
+    const double diff =
+        abs(get(*lorentz_factor)[s] - get(momentum_density_squared)[s]);
+    if (diff > 1.e-5) {
+      ERROR("Lorentz factor and spatial velocity are inconsistent at s = "
+            << s << ":\n"
+            << std::setprecision(17)
+            << "Lorentz factor = " << get(*lorentz_factor)[s] << "\n"
+            << "Lorentz factor calculated from velocity = "
+            << get(momentum_density_squared)[s] << "\n"
+            << "Difference = " << diff << "\n");
     }
   }
   if constexpr (eos_is_barotropic) {
