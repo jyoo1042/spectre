@@ -301,6 +301,24 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
       }
     }
   }
+  // We re-use a temporary variable 'momentum_density_squared'
+  // to perform a consistency check on the Lorentz factor.
+  dot_product(make_not_null(&momentum_density_squared), *spatial_velocity,
+              *spatial_velocity, spatial_metric);
+  get(momentum_density_squared) = 1. / sqrt(1 - get(momentum_density_squared));
+  for (size_t s = 0; s < number_of_points; ++s) {
+    const double diff =
+        abs(get(*lorentz_factor)[s] - get(momentum_density_squared)[s]);
+    if (diff > 1.e-5) {
+      ERROR("Lorentz factor and spatial velocity are inconsistent at s = "
+            << s << ":\n"
+            << std::setprecision(17)
+            << "Lorentz factor = " << get(*lorentz_factor)[s] << "\n"
+            << "Lorentz factor calculated from velocity = "
+            << get(momentum_density_squared)[s] << "\n"
+            << "Difference = " << diff << "\n");
+    }
+  }
   if constexpr (eos_is_barotropic) {
     // Since the primitive recovery scheme is not restricted to lie on the
     // EOS-satisfying sub-manifold, we project back to the sub-manifold by
