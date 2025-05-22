@@ -151,12 +151,20 @@
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/RotatingStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/RelativisticEuler/TovStar.hpp"
 #include "PointwiseFunctions/AnalyticSolutions/Tags.hpp"
+#include "PointwiseFunctions/GeneralRelativity/DetAndInverseSpatialMetric.hpp"
+#include "PointwiseFunctions/GeneralRelativity/Lapse.hpp"
+#include "PointwiseFunctions/GeneralRelativity/Shift.hpp"
+#include "PointwiseFunctions/GeneralRelativity/SpatialMetric.hpp"
 #include "PointwiseFunctions/GeneralRelativity/Surfaces/Tags.hpp"
+#include "PointwiseFunctions/Hydro/DiskDiagnostics.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
 #include "PointwiseFunctions/Hydro/InversePlasmaBeta.hpp"
+#include "PointwiseFunctions/Hydro/LorentzFactor.hpp"
+#include "PointwiseFunctions/Hydro/MagneticFlux.hpp"
 #include "PointwiseFunctions/Hydro/MassFlux.hpp"
 #include "PointwiseFunctions/Hydro/QuadrupoleFormula.hpp"
+#include "PointwiseFunctions/Hydro/StressEnergy.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
 #include "PointwiseFunctions/Hydro/TransportVelocity.hpp"
 #include "Time/Actions/AdvanceTime.hpp"
@@ -303,7 +311,20 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
           ::Events::Tags::ObserverCoordinates<volume_dim, Frame::Inertial>,
           hydro::Tags::TransportVelocity<DataVector, volume_dim,
                                          Frame::Inertial>>,
-      hydro::Tags::InversePlasmaBetaCompute<DataVector>>;
+      hydro::Tags::InversePlasmaBetaCompute<DataVector>,
+      hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
+      gr::Tags::SqrtDetSpatialMetric<DataVector>,
+      gr::Tags::SpatialMetric<DataVector, 3, ::Frame::Inertial>,
+      gr::Tags::Lapse<DataVector>,
+      hydro::Tags::StressEnergyTensorCompute<DataVector>,
+      hydro::Tags::EdotCompute<DataVector, ::Events::Tags::ObserverCoordinates<
+                                               volume_dim, Frame::Inertial>>,
+      hydro::Tags::LdotCompute<DataVector, ::Events::Tags::ObserverCoordinates<
+                                               volume_dim, Frame::Inertial>>,
+      hydro::Tags::MdotCompute<DataVector, ::Events::Tags::ObserverCoordinates<
+                                               volume_dim, Frame::Inertial>>,
+      hydro::Tags::BdotCompute<DataVector, ::Events::Tags::ObserverCoordinates<
+                                               volume_dim, Frame::Inertial>>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
@@ -695,6 +716,62 @@ struct KerrHorizon : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
   using post_interpolation_callbacks =
       tmpl::list<intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe,
                                                               KerrHorizon>>;
+
+  template <typename Metavariables>
+  using interpolating_component =
+      typename Metavariables::dg_element_array_component;
+};
+
+struct Sphere : tt::ConformsTo<intrp::protocols::InterpolationTargetTag> {
+  using temporal_id = ::Tags::Time;
+  using tags_to_observe = tmpl::list<
+      //   ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+      //       hydro::Tags::MassFlux<DataVector, 3>, ::Frame::Inertial>,
+      //   ylm::Tags::EuclideanSurfaceIntegralVectorCompute<
+      //       hydro::Tags::MagneticFlux<DataVector, 3, ::Frame::Inertial>,
+      //       ::Frame::Inertial>,
+      ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Mdot<DataVector>,
+                                                 ::Frame::Inertial>,
+      ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Edot<DataVector>,
+                                                 ::Frame::Inertial>,
+      ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Ldot<DataVector>,
+                                                 ::Frame::Inertial>,
+      ylm::Tags::EuclideanSurfaceIntegralCompute<hydro::Tags::Bdot<DataVector>,
+                                                 ::Frame::Inertial>>;
+  using vars_to_interpolate_to_target =
+      tmpl::list<hydro::Tags::Mdot<DataVector>, hydro::Tags::Edot<DataVector>,
+                 hydro::Tags::Ldot<DataVector>, hydro::Tags::Bdot<DataVector>>;
+  //   hydro::Tags::RestMassDensity<DataVector>,
+  //   hydro::Tags::Pressure<DataVector>,
+  //   hydro::Tags::SpecificInternalEnergy<DataVector>,
+  //   hydro::Tags::SpatialVelocity<DataVector, 3, Frame::Inertial>,
+  //   hydro::Tags::MagneticField<DataVector, 3, Frame::Inertial>,
+  //   hydro::Tags::LorentzFactor<DataVector>,
+  //   hydro::Tags::ComovingMagneticFieldMagnitude<DataVector>,
+  //   gr::Tags::Lapse<DataVector>,
+  //   gr::Tags::Shift<DataVector, 3, Frame::Inertial>,
+  //   gr::Tags::SqrtDetSpatialMetric<DataVector>,
+  //   gr::Tags::SpatialMetric<DataVector, 3, Frame::Inertial>,
+  //   gr::Tags::InverseSpatialMetric<DataVector, 3, Frame::Inertial>>;
+  using compute_items_on_target = tmpl::push_front<
+      tags_to_observe,
+      ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>>;
+  //   ylm::Tags::EuclideanAreaElementCompute<::Frame::Inertial>,
+  //   hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
+  //   hydro::Tags::MagneticFluxCompute<DataVector, 3, ::Frame::Inertial>,
+  //   hydro::Tags::StressEnergyTensorCompute<DataVector>,
+  //   hydro::Tags::EdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>,
+  //   hydro::Tags::LdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>,
+  //   hydro::Tags::MdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>,
+  //   hydro::Tags::BdotCompute<DataVector,
+  //                            intrp::Tags::AllCoords<::Frame::Inertial>>>;
+  using compute_target_points =
+      intrp::TargetPoints::Sphere<Sphere, ::Frame::Inertial>;
+  using post_interpolation_callbacks = tmpl::list<
+      intrp::callbacks::ObserveTimeSeriesOnSurface<tags_to_observe, Sphere>>;
 
   template <typename Metavariables>
   using interpolating_component =
