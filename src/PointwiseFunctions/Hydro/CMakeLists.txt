@@ -9,11 +9,13 @@ spectre_target_sources(
   ${LIBRARY}
   PRIVATE
   ComovingMagneticField.cpp
+  DiskDiagnostics.cpp
   InversePlasmaBeta.cpp
   LorentzFactor.cpp
   LowerSpatialFourVelocity.cpp
   MagneticFieldTreatment.cpp
   MassFlux.cpp
+  MagneticFlux.cpp
   MassWeightedFluidItems.cpp
   QuadrupoleFormula.cpp
   SoundSpeedSquared.cpp
@@ -27,11 +29,13 @@ spectre_target_headers(
   INCLUDE_DIRECTORY ${CMAKE_SOURCE_DIR}/src
   HEADERS
   ComovingMagneticField.hpp
+  DiskDiagnostics.hpp
   InversePlasmaBeta.hpp
   LorentzFactor.hpp
   LowerSpatialFourVelocity.hpp
   MagneticFieldTreatment.hpp
   MassFlux.hpp
+  MagneticFlux.cpp
   MassWeightedFluidItems.hpp
   QuadrupoleFormula.hpp
   SoundSpeedSquared.hpp
