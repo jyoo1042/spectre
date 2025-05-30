@@ -1,5 +1,6 @@
 # Distributed under the MIT License.
 # See LICENSE.txt for details.
+if (FALSE)
 
 spectre_define_test_timeout_factor_option(PYTHON "Python")
 
@@ -115,6 +116,7 @@ install(
     )"
   )
 
+endif()
 add_custom_target(all-pybindings)
 
 # Add a python module, either with or without python bindings and with
@@ -137,6 +139,10 @@ add_custom_target(all-pybindings)
 #                 ${CMAKE_SOURCE_DIR}/src) to add to the module. Omit if
 #                 no python files are to be provided.
 function(SPECTRE_PYTHON_ADD_MODULE MODULE_NAME)
+  #if (NOT Python_FOUND)
+  #return()
+  #endif()
+  return()
   set(SINGLE_VALUE_ARGS MODULE_PATH LIBRARY_NAME)
   set(MULTI_VALUE_ARGS SOURCES PYTHON_FILES)
   cmake_parse_arguments(

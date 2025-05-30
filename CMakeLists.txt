@@ -75,22 +75,22 @@ include(SpectreSetSiteName)
 
 # We need Python in the build system and throughout the code. Setting it up
 # early so we can rely on a consistent Python version in the build system.
-find_package(Python 3.8 REQUIRED)
+find_package(Python REQUIRED)
 
 # Define the location of Python code in the build directory. Unit tests etc. can
 # add this location to their `PYTHONPATH`.
-set(SPECTRE_PYTHON_PREFIX_PARENT "${CMAKE_BINARY_DIR}/bin/python")
-get_filename_component(
-  SPECTRE_PYTHON_PREFIX_PARENT "${SPECTRE_PYTHON_PREFIX_PARENT}" ABSOLUTE)
-set(SPECTRE_PYTHON_SITE_PACKAGES "${CMAKE_BINARY_DIR}/lib/\
-python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages")
-set(PYTHONPATH "${SPECTRE_PYTHON_PREFIX_PARENT}:\
-${SPECTRE_PYTHON_SITE_PACKAGES}")
-if(DEFINED ENV{PYTHONPATH})
-  set(PYTHONPATH "${PYTHONPATH}:$ENV{PYTHONPATH}")
-endif()
-message(STATUS "PYTHONPATH: ${PYTHONPATH}")
-include(BootstrapPyDeps)
+#set(SPECTRE_PYTHON_PREFIX_PARENT "${CMAKE_BINARY_DIR}/bin/python")
+#get_filename_component(
+#  SPECTRE_PYTHON_PREFIX_PARENT "${SPECTRE_PYTHON_PREFIX_PARENT}" ABSOLUTE)
+#set(SPECTRE_PYTHON_SITE_PACKAGES "${CMAKE_BINARY_DIR}/lib/\
+#python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages")
+#set(PYTHONPATH "${SPECTRE_PYTHON_PREFIX_PARENT}:\
+#${SPECTRE_PYTHON_SITE_PACKAGES}")
+#if(DEFINED ENV{PYTHONPATH})
+#  set(PYTHONPATH "${PYTHONPATH}:$ENV{PYTHONPATH}")
+#endif()
+#message(STATUS "PYTHONPATH: ${PYTHONPATH}")
+#include(BootstrapPyDeps)
 
 option(BUILD_DOCS "Enable building documentation" ON)
 option(

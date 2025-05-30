@@ -1,9 +1,10 @@
 # Distributed under the MIT License.
 # See LICENSE.txt for details.
 
+
 option(MACHINE "Select a machine that we know how to run on, such as a \
 particular supercomputer" OFF)
-
+return()
 spectre_python_add_module(
   support
   PYTHON_FILES
@@ -19,6 +20,7 @@ spectre_python_add_module(
 )
 
 if(MACHINE)
+
   message(STATUS "Selected machine: ${MACHINE}")
   configure_file(
     ${CMAKE_SOURCE_DIR}/support/Machines/${MACHINE}.yaml

@@ -22,7 +22,7 @@ exec > >(tee "log.$(date +%F-%T)") 2>&1
 
 mkdir -p $dep_dir/modules
 
-spectre_load_sys_modules
+#spectre_load_sys_modules
 
 if [ -f catch/include/catch.hpp ]; then
     echo "Catch is already installed"
@@ -39,6 +39,24 @@ prepend-path CMAKE_PREFIX_PATH "$dep_dir/catch/"
 EOF
 fi
 cd $dep_dir
+
+# Custom Catch2 install (skip if already installed)
+CATCH2_INSTALL=$HOME/catch2-3.4.0
+MODULE_DIR=$dep_dir/modules
+
+if [ -d "$CATCH2_INSTALL/include" ]; then
+    echo "Custom Catch2 found at $CATCH2_INSTALL"
+    mkdir -p $MODULE_DIR
+    cat >$MODULE_DIR/catch2 <<EOF
+#%Module1.0
+prepend-path CPLUS_INCLUDE_PATH "$CATCH2_INSTALL/include"
+prepend-path CMAKE_PREFIX_PATH "$CATCH2_INSTALL"
+EOF
+else
+    echo "Custom Catch2 not found at $CATCH2_INSTALL, "\
+         "skipping module setup for catch2."
+fi
+
 
 if [ -f blaze/include/blaze/Blaze.h ]; then
     echo "Blaze is already installed"
@@ -81,6 +99,7 @@ else
     rm -rf $dep_dir/libxsmm
     wget https://github.com/libxsmm/libxsmm/archive/1.16.1.tar.gz -O libxsmm.tar.gz
     tar -xzf libxsmm.tar.gz
+    echo "downloaded and tar"
     mv libxsmm-* libxsmm
     cd libxsmm
     make CXX=g++ CC=gcc FC=gfortran -j4
