@@ -156,6 +156,7 @@
 #include "PointwiseFunctions/Hydro/EquationsOfState/Factory.hpp"
 #include "PointwiseFunctions/Hydro/EquationsOfState/RegisterDerivedWithCharm.hpp"
 #include "PointwiseFunctions/Hydro/InversePlasmaBeta.hpp"
+#include "PointwiseFunctions/Hydro/MagnetizationSigma.hpp"
 #include "PointwiseFunctions/Hydro/MassFlux.hpp"
 #include "PointwiseFunctions/Hydro/QuadrupoleFormula.hpp"
 #include "PointwiseFunctions/Hydro/Tags.hpp"
@@ -308,7 +309,8 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
       hydro::Tags::MassFluxCompute<DataVector, 3, ::Frame::Inertial>,
       gr::Tags::SqrtDetSpatialMetric<DataVector>,
       gr::Tags::SpatialMetric<DataVector, 3, ::Frame::Inertial>,
-      gr::Tags::Lapse<DataVector>>;
+      gr::Tags::Lapse<DataVector>,
+      hydro::Tags::MagnetizationSigmaCompute<DataVector>>;
   using non_tensor_compute_tags = tmpl::list<
       tmpl::conditional_t<
           use_dg_subcell,
