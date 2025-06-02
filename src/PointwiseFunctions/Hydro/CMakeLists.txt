@@ -13,6 +13,7 @@ spectre_target_sources(
   LorentzFactor.cpp
   LowerSpatialFourVelocity.cpp
   MagneticFieldTreatment.cpp
+  MagnetizationSigma.cpp
   MassFlux.cpp
   MassWeightedFluidItems.cpp
   QuadrupoleFormula.cpp
@@ -31,6 +32,7 @@ spectre_target_headers(
   LorentzFactor.hpp
   LowerSpatialFourVelocity.hpp
   MagneticFieldTreatment.hpp
+  MagnetizationSigma.cpp
   MassFlux.hpp
   MassWeightedFluidItems.hpp
   QuadrupoleFormula.hpp
