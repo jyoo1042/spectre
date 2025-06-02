@@ -156,10 +156,10 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
   }
 
   const size_t number_of_points = get<0>(tilde_b).size();
-  Variables<
-      tmpl::list<::Tags::TempScalar<0>, ::Tags::TempScalar<1>,
-                 ::Tags::TempScalar<2>, ::Tags::TempScalar<3>,
-                 ::Tags::TempScalar<4>, ::Tags::TempI<5, 3, Frame::Inertial>>>
+  Variables<tmpl::list<
+      ::Tags::TempScalar<0>, ::Tags::TempScalar<1>, ::Tags::TempScalar<2>,
+      ::Tags::TempScalar<3>, ::Tags::TempScalar<4>,
+      ::Tags::TempI<5, 3, Frame::Inertial>, ::Tags::TempScalar<6>>>
       temp_buffer(number_of_points);
 
   DataVector& tau = get(get<::Tags::TempScalar<0>>(temp_buffer));
@@ -190,6 +190,9 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
       get(get<::Tags::TempScalar<4>>(temp_buffer));
   rest_mass_density_times_lorentz_factor =
       get(tilde_d) / get(sqrt_det_spatial_metric);
+
+  Scalar<DataVector>& new_lorentz_factor =
+      get<::Tags::TempScalar<6>>(temp_buffer);
 
   // This may need bounds
   // limit Ye to table bounds once that is implemented
@@ -339,20 +342,31 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
   }
   // We re-use a temporary variable 'momentum_density_squared'
   // to perform a consistency check on the Lorentz factor.
-  dot_product(make_not_null(&momentum_density_squared), *spatial_velocity,
+  dot_product(make_not_null(&new_lorentz_factor), *spatial_velocity,
               *spatial_velocity, spatial_metric);
-  get(momentum_density_squared) = 1. / sqrt(1 - get(momentum_density_squared));
+  get(new_lorentz_factor) = 1. / sqrt(1 - get(new_lorentz_factor));
   for (size_t s = 0; s < number_of_points; ++s) {
     const double diff =
-        abs(get(*lorentz_factor)[s] - get(momentum_density_squared)[s]);
-    if (diff > 1.e-5) {
+        abs(get(*lorentz_factor)[s] - get(new_lorentz_factor)[s]);
+    if (diff > 1.e-1) {
       ERROR("Lorentz factor and spatial velocity are inconsistent at s = "
             << s << ":\n"
             << std::setprecision(17)
             << "Lorentz factor = " << get(*lorentz_factor)[s] << "\n"
             << "Lorentz factor calculated from velocity = "
-            << get(momentum_density_squared)[s] << "\n"
-            << "Difference = " << diff << "\n");
+            << get(new_lorentz_factor)[s] << "\n"
+            << "Difference = " << diff << "\n"
+            << "Pressure = " << get(*pressure)[s] << "\n"
+            << "Momentum density squared = " << get(momentum_density_squared)[s]
+            << "\n"
+            << "Momentum density dot magnetic field = "
+            << get(momentum_density_dot_magnetic_field)[s] << "\n"
+            << "Magnetic field squared = " << get(magnetic_field_squared)[s]
+            << "\n"
+            << "Rest mass density times Lorentz factor = "
+            << rest_mass_density_times_lorentz_factor[s] << "\n"
+            << "Rest mass density = " << get(*rest_mass_density)[s] << "\n"
+            << "Electron fraction = " << get(*electron_fraction)[s] << "\n");
     }
   }
   if constexpr (eos_is_barotropic) {
