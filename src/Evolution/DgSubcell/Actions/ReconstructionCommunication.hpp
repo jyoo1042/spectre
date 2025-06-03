@@ -31,12 +31,14 @@
 #include "Domain/Tags.hpp"
 #include "Domain/Tags/NeighborMesh.hpp"
 #include "Evolution/DgSubcell/ActiveGrid.hpp"
+#include "Evolution/DgSubcell/CombineVolumeGhostData.hpp"
 #include "Evolution/DgSubcell/GhostData.hpp"
 #include "Evolution/DgSubcell/NeighborRdmpAndVolumeData.hpp"
 #include "Evolution/DgSubcell/Projection.hpp"
 #include "Evolution/DgSubcell/RdmpTci.hpp"
 #include "Evolution/DgSubcell/RdmpTciData.hpp"
 #include "Evolution/DgSubcell/SliceData.hpp"
+#include "Evolution/DgSubcell/SubcellOptions.hpp"
 #include "Evolution/DgSubcell/Tags/ActiveGrid.hpp"
 #include "Evolution/DgSubcell/Tags/CellCenteredFlux.hpp"
 #include "Evolution/DgSubcell/Tags/DataForRdmpTci.hpp"
@@ -45,6 +47,7 @@
 #include "Evolution/DgSubcell/Tags/Mesh.hpp"
 #include "Evolution/DgSubcell/Tags/MeshForGhostData.hpp"
 #include "Evolution/DgSubcell/Tags/Reconstructor.hpp"
+#include "Evolution/DgSubcell/Tags/SubcellOptions.hpp"
 #include "Evolution/DgSubcell/Tags/TciStatus.hpp"
 #include "Evolution/DiscontinuousGalerkin/BoundaryData.hpp"
 #include "Evolution/DiscontinuousGalerkin/InboxTags.hpp"
@@ -181,9 +184,25 @@ struct SendDataForReconstruction {
               static_cast<std::ptrdiff_t>(volume_data_to_slice.size() -
                                           cell_centered_flux.value().size())));
     }
+
+    // When using enable_extension_directions, we send the ghost data
+    // for problematic directions separately with the new action
+    // ReceiveAndSendDataForReconstruction, so we only slice the data
+    // for non-problematic directions here.
+    const auto& extension_directions =
+        db::get<evolution::dg::subcell::Tags::ExtensionDirections<Dim>>(box);
+    std::unordered_set<Direction<Dim>> dirs_to_work;
+    for (const auto& internal_direction : element.internal_boundaries()) {
+      if (extension_directions.contains(internal_direction)) {
+        continue;
+      } else {
+        dirs_to_work.insert(internal_direction);
+      }
+    }
+
     const DirectionMap<Dim, DataVector> all_sliced_data = slice_data(
         volume_data_to_slice, subcell_mesh.extents(), ghost_zone_size,
-        element.internal_boundaries(), 0,
+        dirs_to_work, 0,
         db::get<
             evolution::dg::subcell::Tags::InterpolatorsFromFdToNeighborFd<Dim>>(
             box));
@@ -207,76 +226,358 @@ struct SendDataForReconstruction {
     // Compute and send actual variables
     for (const auto& [direction, neighbors_in_direction] :
          element.neighbors()) {
-      ASSERT(neighbors_in_direction.size() == 1,
-             "AMR is not yet supported when using DG-subcell. Note that this "
-             "condition could be relaxed to support AMR only where the "
-             "evolution is using DG without any changes to subcell.");
+      // Only need to send data for directions that are not
+      // problematic directions (keys of extension_directions).
+      if (!extension_directions.contains(direction)) {
+        ASSERT(neighbors_in_direction.size() == 1,
+               "AMR is not yet supported when using DG-subcell. Note that this "
+               "condition could be relaxed to support AMR only where the "
+               "evolution is using DG without any changes to subcell.");
 
-      for (const ElementId<Dim>& neighbor : neighbors_in_direction) {
-        const auto& orientation = neighbors_in_direction.orientation(neighbor);
-        const auto direction_from_neighbor = orientation(direction.opposite());
-        const size_t rdmp_size = rdmp_tci_data.max_variables_values.size() +
-                                 rdmp_tci_data.min_variables_values.size();
-        const auto& sliced_data_in_direction = all_sliced_data.at(direction);
-        // Allocate with subcell data and rdmp data
-        DataVector subcell_data_to_send{sliced_data_in_direction.size() +
-                                        rdmp_size};
-        // Note: Currently we interpolate our solution to our neighbor FD grid
-        // even when grid points align but are oriented differently. There's a
-        // possible optimization for the rare (almost never?) edge case where
-        // two blocks have the same ghost zone coordinates but have different
-        // orientations (e.g. RotatedBricks). Since this shouldn't ever happen
-        // outside of tests, we currently don't bother with it. If we wanted to,
-        // here's the code:
-        //
-        // if (not orientation.is_aligned()) {
-        //   std::array<size_t, Dim> slice_extents{};
-        //   for (size_t d = 0; d < Dim; ++d) {
-        //     gsl::at(slice_extents, d) = subcell_mesh.extents(d);
-        //   }
-        //   gsl::at(slice_extents, direction.dimension()) = ghost_zone_size;
-        //   // Need a view so we only get the subcell data and not the rdmp
-        //   // data
-        //   DataVector subcell_data_to_send_view{
-        //       subcell_data_to_send.data(),
-        //       subcell_data_to_send.size() - rdmp_size};
-        //   orient_variables(make_not_null(&subcell_data_to_send_view),
-        //                  sliced_data_in_direction, Index<Dim>{slice_extents},
-        //                  orientation);
-        // } else { std::copy(...); }
-        //
-        // Copy over data since it's already oriented from interpolation
-        std::copy(sliced_data_in_direction.begin(),
-                  sliced_data_in_direction.end(), subcell_data_to_send.begin());
-        // Copy rdmp data to end of subcell_data_to_send
-        std::copy(
-            rdmp_tci_data.max_variables_values.cbegin(),
-            rdmp_tci_data.max_variables_values.cend(),
-            std::prev(subcell_data_to_send.end(), static_cast<int>(rdmp_size)));
-        std::copy(rdmp_tci_data.min_variables_values.cbegin(),
-                  rdmp_tci_data.min_variables_values.cend(),
-                  std::prev(subcell_data_to_send.end(),
-                            static_cast<int>(
-                                rdmp_tci_data.min_variables_values.size())));
+        for (const ElementId<Dim>& neighbor : neighbors_in_direction) {
+          const auto& orientation =
+              neighbors_in_direction.orientation(neighbor);
+          const auto direction_from_neighbor =
+              orientation(direction.opposite());
+          const size_t rdmp_size = rdmp_tci_data.max_variables_values.size() +
+                                   rdmp_tci_data.min_variables_values.size();
+          const auto& sliced_data_in_direction = all_sliced_data.at(direction);
 
-        evolution::dg::BoundaryData<Dim> data{
-            dg_mesh,      subcell_mesh,
-            std::nullopt, std::move(subcell_data_to_send),
-            std::nullopt, next_time_step_id,
-            tci_decision, integration_order};
+          // Allocate with subcell data and rdmp data
+          DataVector subcell_data_to_send{sliced_data_in_direction.size() +
+                                          rdmp_size};
+          // Note: Currently we interpolate our solution to our neighbor FD grid
+          // even when grid points align but are oriented differently. There's a
+          // possible optimization for the rare (almost never?) edge case where
+          // two blocks have the same ghost zone coordinates but have different
+          // orientations (e.g. RotatedBricks). Since this shouldn't ever happen
+          // outside of tests, we currently don't bother with it. If we wanted
+          // to, here's the code:
+          //
+          // if (not orientation.is_aligned()) {
+          //   std::array<size_t, Dim> slice_extents{};
+          //   for (size_t d = 0; d < Dim; ++d) {
+          //     gsl::at(slice_extents, d) = subcell_mesh.extents(d);
+          //   }
+          //   gsl::at(slice_extents, direction.dimension()) = ghost_zone_size;
+          //   // Need a view so we only get the subcell data and not the rdmp
+          //   // data
+          //   DataVector subcell_data_to_send_view{
+          //       subcell_data_to_send.data(),
+          //       subcell_data_to_send.size() - rdmp_size};
+          //   orient_variables(make_not_null(&subcell_data_to_send_view),
+          //                  sliced_data_in_direction,
+          //                  Index<Dim>{slice_extents}, orientation);
+          // } else { std::copy(...); }
+          //
 
-        Parallel::receive_data<
-            evolution::dg::Tags::BoundaryCorrectionAndGhostCellsInbox<
-                Dim, Parallel::is_dg_element_collection_v<ParallelComponent>>>(
-            receiver_proxy[neighbor], time_step_id,
-            std::pair{DirectionalId<Dim>{direction_from_neighbor, element.id()},
-                      std::move(data)});
+          // Copy over data since it's already oriented from interpolation
+          std::copy(sliced_data_in_direction.begin(),
+                    sliced_data_in_direction.end(),
+                    subcell_data_to_send.begin());
+          // Copy rdmp data to end of subcell_data_to_send
+          std::copy(rdmp_tci_data.max_variables_values.cbegin(),
+                    rdmp_tci_data.max_variables_values.cend(),
+                    std::prev(subcell_data_to_send.end(),
+                              static_cast<int>(rdmp_size)));
+          std::copy(rdmp_tci_data.min_variables_values.cbegin(),
+                    rdmp_tci_data.min_variables_values.cend(),
+                    std::prev(subcell_data_to_send.end(),
+                              static_cast<int>(
+                                  rdmp_tci_data.min_variables_values.size())));
+
+          evolution::dg::BoundaryData<Dim> data{
+              dg_mesh,      subcell_mesh,
+              std::nullopt, std::move(subcell_data_to_send),
+              std::nullopt, next_time_step_id,
+              tci_decision, integration_order};
+
+          Parallel::receive_data<
+              evolution::dg::Tags::BoundaryCorrectionAndGhostCellsInbox<
+                  Dim,
+                  Parallel::is_dg_element_collection_v<ParallelComponent>>>(
+              receiver_proxy[neighbor], time_step_id,
+              std::pair{
+                  DirectionalId<Dim>{direction_from_neighbor, element.id()},
+                  std::move(data)});
+        }
       }
     }
     return {Parallel::AlgorithmExecution::Continue, std::nullopt};
   }
 };
 
+/*!
+ * \brief Optionally receives and processes ghost data for subcell
+ * reconstruction, handling special extension logic only if extension directions
+ * are enabled.
+ *
+ * This action is a no-op unless `EnableExtensionDirection` is true in the
+ * SubcellOptions.
+ *
+ * When enabled, the action:
+ * - Receives subcell ghost data from neighbors for all non-problematic
+ * directions.
+ * - For “problematic directions” (faces where ghost data can’t be directly
+ * provided, because the required ghost points would lie outside the element),
+ * it extends the element’s volume data using ghost data from another neighbor
+ * (the “direction_to_extend”), interpolates to the requested ghost points, and
+ * then sends the completed ghost data to the original neighbor.
+ */
+template <size_t Dim, typename GhostDataMutator, bool LocalTimeStepping,
+          bool UseNodegroupDgElements>
+struct ReceiveAndSendDataForReconstruction {
+  using inbox_tags =
+      tmpl::list<evolution::dg::Tags::BoundaryCorrectionAndGhostCellsInbox<
+          Dim, UseNodegroupDgElements>>;
+  template <typename DbTags, typename... InboxTags, typename ArrayIndex,
+            typename ActionList, typename ParallelComponent,
+            typename Metavariables>
+  static Parallel::iterable_action_return_t apply(
+      db::DataBox<DbTags>& box, tuples::TaggedTuple<InboxTags...>& inboxes,
+      Parallel::GlobalCache<Metavariables>& cache,
+      const ArrayIndex& /*array_index*/, const ActionList /*meta*/,
+      const ParallelComponent* const /*meta*/) {
+    const Element<Dim>& element = db::get<::domain::Tags::Element<Dim>>(box);
+    const auto& extension_directions =
+        db::get<evolution::dg::subcell::Tags::ExtensionDirections<Dim>>(box);
+
+    const bool enable_extension_directions =
+        db::get<evolution::dg::subcell::Tags::SubcellOptions<Dim>>(box)
+            .enable_extension_directions();
+    if (!enable_extension_directions) {
+      // We are not using extension directions, so just continue without doing
+      // any work.
+      return {Parallel::AlgorithmExecution::Continue, std::nullopt};
+    }
+
+    if (extension_directions.empty()) {
+      // For this element, we have no extension directions, so just
+      // continue without doing any work.
+      return {Parallel::AlgorithmExecution::Continue, std::nullopt};
+    }
+
+    // Need to subtract number of problematic directions.
+    const auto number_of_expected_messages =
+        element.neighbors().size() - extension_directions.size();
+
+    std::unordered_set<DirectionalId<Dim>> expected_keys;
+    for (const auto& internal_direction : element.internal_boundaries()) {
+      if (!extension_directions.contains(internal_direction)) {
+        // Note here, we assume that we have only one neighbor per
+        // direction, so we can just take the first one.
+        expected_keys.emplace(
+            internal_direction,
+            *element.neighbors().at(internal_direction).ids().begin());
+      }
+    }
+
+    if (UNLIKELY(number_of_expected_messages == 0)) {
+      // We have no neighbors, so just continue without doing any work.
+      // Technically, this could also happen if all of the neighbors are in
+      // problematic directions, but this case is unlikely to ever happen.
+      return {Parallel::AlgorithmExecution::Continue, std::nullopt};
+    }
+
+    const auto& interpolants = db::get<
+        evolution::dg::subcell::Tags::InterpolatorsFromFdToNeighborFd<Dim>>(
+        box);
+
+    const auto& current_time_step_id = db::get<::Tags::TimeStepId>(box);
+    std::map<TimeStepId,
+             DirectionalIdMap<Dim, evolution::dg::BoundaryData<Dim>>>& inbox =
+        tuples::get<evolution::dg::Tags::BoundaryCorrectionAndGhostCellsInbox<
+            Metavariables::volume_dim,
+            Parallel::is_dg_element_collection_v<ParallelComponent>>>(inboxes);
+    const auto& received = inbox.find(current_time_step_id);
+    // Check we have at least some data from correct time, and then check
+    // we have received all data
+    if (received == inbox.end() or
+        !std::all_of(expected_keys.begin(), expected_keys.end(),
+                     [&received](const auto& key) {
+                       return received->second.find(key) !=
+                              received->second.end();
+                     })) {
+      return {Parallel::AlgorithmExecution::Retry, std::nullopt};
+    }
+
+    const size_t ghost_zone_size =
+        db::get<evolution::dg::subcell::Tags::Reconstructor>(box)
+            .ghost_zone_size();
+    const Mesh<Dim>& dg_mesh = db::get<::domain::Tags::Mesh<Dim>>(box);
+    const Mesh<Dim>& subcell_mesh = db::get<Tags::Mesh<Dim>>(box);
+    const Index<Dim> subcell_extents = subcell_mesh.extents();
+
+    const auto& received_data = inbox[current_time_step_id];
+
+    ASSERT(received_data.size() >= number_of_expected_messages,
+           "received_data size: " << received_data.size()
+                                  << " less than expected number of messages: "
+                                  << number_of_expected_messages << " !");
+
+    using flux_variables = typename Metavariables::system::flux_variables;
+    const auto& cell_centered_flux =
+        db::get<Tags::CellCenteredFlux<flux_variables, Dim>>(box);
+    DataVector volume_data_to_slice = db::mutate_apply(
+        GhostDataMutator{}, make_not_null(&box),
+        cell_centered_flux.has_value() ? cell_centered_flux.value().size()
+                                       : 0_st);
+    if (cell_centered_flux.has_value()) {
+      std::copy(
+          cell_centered_flux.value().data(),
+          std::next(
+              cell_centered_flux.value().data(),
+              static_cast<std::ptrdiff_t>(cell_centered_flux.value().size())),
+          std::next(
+              volume_data_to_slice.data(),
+              static_cast<std::ptrdiff_t>(volume_data_to_slice.size() -
+                                          cell_centered_flux.value().size())));
+    }
+
+    auto& receiver_proxy =
+        Parallel::get_parallel_component<ParallelComponent>(cache);
+    const RdmpTciData& rdmp_tci_data = db::get<Tags::DataForRdmpTci>(box);
+    const TimeStepId& time_step_id = db::get<::Tags::TimeStepId>(box);
+    const TimeStepId& next_time_step_id =
+        LocalTimeStepping ? db::get<::Tags::Next<::Tags::TimeStepId>>(box)
+                          : db::get<::Tags::TimeStepId>(box);
+
+    const int tci_decision =
+        db::get<evolution::dg::subcell::Tags::TciDecision>(box);
+    const auto integration_order =
+        db::get<::Tags::HistoryEvolvedVariables<>>(box).integration_order();
+
+    const size_t number_of_points = subcell_mesh.extents().product();
+    // Number of independent components per grid point.
+    const size_t number_of_components =
+        volume_data_to_slice.size() / number_of_points;
+
+    // For each problematic direction (a direction for which the element
+    // cannot directly provide ghost data):
+    // 1. Receive ghost data from our neighbor in the direction specified by
+    // extension_direction.direction_to_extend.
+    // 2. Use this data to extend our own volume data, then interpolate to the
+    // required ghost points.
+    // 3. Send the final ghost data to the neighbor at problematic_direction.
+    for (const auto& [problematic_direction, extension_direction] :
+         extension_directions) {
+      // Direction to extend the volume data.
+      const Direction<Dim> direction_to_extend =
+          extension_direction.direction_to_extend;
+
+      // Check that direction_to_extend is not a problematic direction.
+      ASSERT(problematic_direction != direction_to_extend,
+             "The direction to extend must not be a problematic direction. "
+             "problematic_direction: "
+                 << problematic_direction
+                 << ", direction_to_extend: " << direction_to_extend);
+
+      // Again, we are assuming that we have only one neighbor per direction,
+      // and we are just taking the first one.
+      ElementId<Dim> relevant_neighbor_id =
+          *((element.neighbors()).at(direction_to_extend).ids().begin());
+      ElementId<Dim> problematic_neighbor_id =
+          *((element.neighbors()).at(problematic_direction).ids().begin());
+
+      const auto& orientation = (element.neighbors())
+                                    .at(problematic_direction)
+                                    .orientation(problematic_neighbor_id);
+      const auto direction_from_neighbor =
+          orientation(problematic_direction.opposite());
+
+      // Sanity checks.
+      // 1. Only one neighbor per direction.
+      ASSERT(element.neighbors().at(direction_to_extend).ids().size() == 1,
+             "Assumption one neighbor per direction failed. "
+             "direction_to_extend: "
+                 << direction_to_extend << ", neighbors.size() = "
+                 << element.neighbors().at(direction_to_extend).ids().size()
+                 << ", element: " << element.id());
+      // 2. Only internal boundary for the extension.
+      ASSERT(element.internal_boundaries().contains(direction_to_extend),
+             "Direction to extend not an internal boundary! "
+             "dir_to_extend = "
+                 << direction_to_extend << ", element.internal_boundaries() = "
+                 << element.internal_boundaries()
+                 << ", element = " << element.id());
+      // 3. Received data must have entry for direction to extend.
+      ASSERT((received_data.contains(DirectionalId<Dim>{direction_to_extend,
+                                                        relevant_neighbor_id})),
+             "Received data missing entry for direction to extend."
+                 << " direction_to_extend = " << direction_to_extend
+                 << ", relevant_neighbor_id = " << relevant_neighbor_id
+                 << ", problematic_direction = " << problematic_direction
+                 << ", element = " << element.id());
+      // 4. Receive data must have received ghost data for this extension
+      // direction.
+      ASSERT(((received_data.at(DirectionalId<Dim>{direction_to_extend,
+                                                   relevant_neighbor_id}))
+                  .ghost_cell_data.has_value()),
+             "Ghost data missing for this extension direction."
+                 << " direction_to_extend = " << direction_to_extend
+                 << ", relevant_neighbor_id = " << relevant_neighbor_id
+                 << ", problematic_direction = " << problematic_direction
+                 << ", element = " << element.id());
+
+      const size_t rdmp_size = rdmp_tci_data.max_variables_values.size() +
+                               rdmp_tci_data.min_variables_values.size();
+
+      const DataVector& full_ghost_cell_data =
+          received_data
+              .at(DirectionalId<Dim>{direction_to_extend, relevant_neighbor_id})
+              .ghost_cell_data.value();
+      const size_t relevant_ghost_data_size =
+          full_ghost_cell_data.size() - rdmp_size;
+      DataVector relevant_ghost_data;
+      relevant_ghost_data.set_data_ref(
+          const_cast<double*>(full_ghost_cell_data.data()),  // NOLINT
+          relevant_ghost_data_size);
+
+      const auto& interpolant =
+          (interpolants.at(DirectionalId<Dim>{problematic_direction,
+                                              problematic_neighbor_id}))
+              .value();
+      const DataVector combined_data = combine_volume_ghost_data(
+          volume_data_to_slice, relevant_ghost_data, subcell_extents,
+          ghost_zone_size, direction_to_extend);
+      const size_t result_size =
+          ghost_zone_size * subcell_mesh.extents()
+                                .slice_away(problematic_direction.dimension())
+                                .product();
+      const size_t span_size = result_size * number_of_components;
+
+      DataVector subcell_data_to_send{span_size + rdmp_size};
+
+      auto result_span = gsl::make_span(subcell_data_to_send.data(), span_size);
+      interpolant.interpolate(
+          make_not_null(&result_span),
+          gsl::make_span(combined_data.data(), combined_data.size()));
+
+      // Copy rdmp data to end of subcell_data_to_send
+      std::copy(
+          rdmp_tci_data.max_variables_values.cbegin(),
+          rdmp_tci_data.max_variables_values.cend(),
+          std::prev(subcell_data_to_send.end(), static_cast<int>(rdmp_size)));
+      std::copy(rdmp_tci_data.min_variables_values.cbegin(),
+                rdmp_tci_data.min_variables_values.cend(),
+                std::prev(subcell_data_to_send.end(),
+                          static_cast<int>(
+                              rdmp_tci_data.min_variables_values.size())));
+      evolution::dg::BoundaryData<Dim> data{
+          dg_mesh,      subcell_mesh,
+          std::nullopt, std::move(subcell_data_to_send),
+          std::nullopt, next_time_step_id,
+          tci_decision, integration_order};
+      Parallel::receive_data<
+          evolution::dg::Tags::BoundaryCorrectionAndGhostCellsInbox<
+              Dim, Parallel::is_dg_element_collection_v<ParallelComponent>>>(
+          receiver_proxy[problematic_neighbor_id], time_step_id,
+          std::pair{DirectionalId<Dim>{direction_from_neighbor, element.id()},
+                    std::move(data)});
+    }
+    return {Parallel::AlgorithmExecution::Continue, std::nullopt};
+  }
+};
 /*!
  * \brief Receive the subcell data from our neighbor, and accumulate the data
  * from the relaxed discrete maximum principle troubled-cell indicator.
@@ -329,7 +630,6 @@ struct ReceiveDataForReconstruction {
       // We have no neighbors, so just continue without doing any work
       return {Parallel::AlgorithmExecution::Continue, std::nullopt};
     }
-
     using ::operator<<;
     const auto& current_time_step_id = db::get<::Tags::TimeStepId>(box);
     std::map<TimeStepId,

@@ -13,6 +13,7 @@
 #include "Evolution/ComputeTags.hpp"
 #include "Evolution/Conservative/UpdateConservatives.hpp"
 #include "Evolution/Conservative/UpdatePrimitives.hpp"
+#include "Evolution/Deadlock/PrintDgElementArray.hpp"
 #include "Evolution/DgSubcell/Actions/Initialize.hpp"
 #include "Evolution/DgSubcell/Actions/Labels.hpp"
 #include "Evolution/DgSubcell/Actions/ReconstructionCommunication.hpp"
@@ -468,6 +469,9 @@ struct EvolutionMetavars<tmpl::list<InterpolationTargetTags...>,
       Actions::MutateApply<evolution::dg::subcell::fd::CellCenteredFlux<
           system, grmhd::ValenciaDivClean::ComputeFluxes, volume_dim, false>>,
       evolution::dg::subcell::Actions::SendDataForReconstruction<
+          volume_dim, grmhd::ValenciaDivClean::subcell::PrimitiveGhostVariables,
+          local_time_stepping, use_dg_element_collection>,
+      evolution::dg::subcell::Actions::ReceiveAndSendDataForReconstruction<
           volume_dim, grmhd::ValenciaDivClean::subcell::PrimitiveGhostVariables,
           local_time_stepping, use_dg_element_collection>,
       evolution::dg::subcell::Actions::ReceiveDataForReconstruction<volume_dim>,
