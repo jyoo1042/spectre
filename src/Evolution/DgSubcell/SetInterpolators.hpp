@@ -226,11 +226,11 @@ struct SetInterpolators {
             }
           }
         }
-        if (direction.dimension() == 2 && needs_extension) {
-          // we don't want to use this extension to pick up for radial
-          // direction. where we are switching from linear to log distribution.
-          needs_extension = false;
-        }
+        // if (direction.dimension() == 2 && needs_extension) {
+        //   // we don't want to use this extension to pick up for radial
+        //   // direction. where we are switching from linear to log
+        //   distribution. needs_extension = false;
+        // }
 
         if (needs_extension) {
           if (!direction_to_extend.has_value()) {
