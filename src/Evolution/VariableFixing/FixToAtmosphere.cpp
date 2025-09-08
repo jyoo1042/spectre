@@ -274,7 +274,7 @@ void FixToAtmosphere<Dim>::operator()(
       // We only need to apply the magnetization limit if the magnetic field
       // is non-zero and either the magnetization or inverse plasma beta is
       // too large.
-      if ((get(magnetic_field_squared)[i] > 0.0) and
+      if ((magnetic_field_squared > 0.0) and
           ((get(*rest_mass_density)[i] <
             comoving_magnetic_field_squared / sigma_bound) or
            (get(*pressure)[i] <
