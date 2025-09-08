@@ -232,11 +232,11 @@ class FixToAtmosphere {
       using type = double;
       static type lower_bound() { return 0.0; }
       static constexpr Options::String help = {
-          "Below this value we set T=T_min if |T-T_min|<EplisonKappaMinus "
+          "Below this value we set T=T_min if |T-T_min|<EpsilonKappaMinus "
           "|T|. Typically set to about a factor of 20 larger than the "
           "atmosphere density."};
     };
-    struct EplisonKappaMinus {
+    struct EpsilonKappaMinus {
       using type = double;
       static constexpr Options::String help = {
           "Used to limit the temperature in conjunction with "
@@ -266,13 +266,13 @@ class FixToAtmosphere {
       static constexpr Options::String help = {
           "If true then we limit the temperature using the KappaMax procedure "
           "at all densities above DensityUpperBound, but with "
-          "`KappaMax=1+EplisonKappaMax`. Typically set to False."};
+          "`KappaMax=1+EpsilonKappaMinus`. Typically set to False."};
     };
-    using options = tmpl::list<DensityLowerBound, EplisonKappaMinus,
+    using options = tmpl::list<DensityLowerBound, EpsilonKappaMinus,
                                DensityUpperBound, EpsilonKappaMax,
                                MinTemperature, LimitAboveDensityUpperBound>;
     static constexpr Options::String help = {
-        "If set then we apply a limiting precodure on the temperature near the "
+        "If set then we apply a limiting procedure on the temperature near the "
         "atmosphere based on essentially limiting the polytropic constant in a "
         "Gamma-law equation of state."};
 
@@ -283,13 +283,13 @@ class FixToAtmosphere {
     bool operator!=(const KappaLimitingOptions& rhs) const;
 
     double density_lower_bound{std::numeric_limits<double>::signaling_NaN()};
-    double eplison_kappa_minus{std::numeric_limits<double>::signaling_NaN()};
+    double epsilon_kappa_minus{std::numeric_limits<double>::signaling_NaN()};
     double density_upper_bound{std::numeric_limits<double>::signaling_NaN()};
     double epsilon_kappa_max{std::numeric_limits<double>::signaling_NaN()};
     std::optional<double> min_temperature{std::nullopt};
     bool limit_above_density_upper_bound{false};
   };
-  /// \brief If set then we apply a limiting precodure on the temperature near
+  /// \brief If set then we apply a limiting procedure on the temperature near
   /// the atmosphere based on essentially limiting the polytropic constant in a
   /// Gamma-law equation of state.
   struct KappaLimiting {
@@ -299,13 +299,13 @@ class FixToAtmosphere {
 
   /*!
    * \brief Options for limiting the magnetization and inverse plasma beta
-   * by effectively increaseing rest mass density and specific internal energy
-   * (pressure) until we satisfy prescribed upper bounds.
+   * by increasing the rest mass density and specific internal energy
+   * (and thus the pressure) until prescribed upper bounds are satisfied.
    * This ensures the magnetization and inverse plasma beta in the simulation
-   * is bounded to avoid failure in primitive recovery.
+   * are bounded to avoid failure in primitive recovery or unstable evolution.
    *
-   * Magnetization is defined as $\sigma = b^2/\rho$ and invser plasma beta,
-   * $1/\beta = b^2/P$ where $b$ is comoving magnetic field magnitude and
+   * Magnetization is defined as $\sigma = b^2/\rho$ and inverse plasma beta,
+   * $1/\beta = b^2/P$ where $b$ is the comoving magnetic field magnitude and
    * $P$ is the fluid pressure.
    */
   struct MagnetizationLimitingOptions {
@@ -313,7 +313,7 @@ class FixToAtmosphere {
       using type = double;
       static type lower_bound() { return 0.0; }
       static constexpr Options::String help = {
-          "Upper bound for magneization sigma."};
+          "Upper bound for magnetization sigma."};
     };
     struct InversePlasmaBetaBound {
       using type = double;
@@ -323,9 +323,9 @@ class FixToAtmosphere {
     };
     using options = tmpl::list<MagnetizationBound, InversePlasmaBetaBound>;
     static constexpr Options::String help = {
-        "If set then we apply a limiting precodure on the magnetizations "
-        "and inverse plasma beta to be bounded below by some prescribed "
-        "upper bounds."};
+        "If set, then we apply a limiting procedure on the magnetizations "
+        "and inverse plasma beta to be bounded by some prescribed upper "
+        "bounds."};
 
     // NOLINTNEXTLINE(google-runtime-references)
     void pup(PUP::er& p);
@@ -337,9 +337,9 @@ class FixToAtmosphere {
     double inverse_plasma_beta_bound{
         std::numeric_limits<double>::signaling_NaN()};
   };
-  /// \brief If set then we apply a limiting precodure on the magnetization and
-  /// inverse plasma beta to be bounded below by some prescribed upper bounds
-  /// to ensure robust primitive recovery.
+  /// \brief If set then we apply a limiting procedure on the magnetization and
+  /// inverse plasma beta to be bounded by some prescribed upper bounds to
+  /// ensure robust primitive recovery.
   struct MagnetizationLimiting {
     using type = Options::Auto<MagnetizationLimitingOptions, Disabled>;
     static constexpr Options::String help = MagnetizationLimitingOptions::help;

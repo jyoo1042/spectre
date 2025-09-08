@@ -33,7 +33,7 @@ std::ostream& operator<<(std::ostream& os,
     case FixReconstructedStateToAtmosphere::Never:
       return os << "Never";
     default:
-      ERROR("Unknown floating point type, must be Float or Double");
+      ERROR("Unknown FixReconstructedStateToAtmosphere value.");
   }
 }
 }  // namespace VariableFixing
@@ -94,7 +94,7 @@ FixToAtmosphere<Dim>::FixToAtmosphere(
       PARSE_ERROR(context,
                   "The AtmosphereMaxVelocity ("
                       << velocity_limiting_->atmosphere_max_velocity
-                      << ") must be smaller NearAtmosphereMaxVelocity ("
+                      << ") must be smaller than NearAtmosphereMaxVelocity ("
                       << velocity_limiting_->near_atmosphere_max_velocity
                       << ").");
     }
@@ -270,10 +270,15 @@ void FixToAtmosphere<Dim>::operator()(
       const double comoving_magnetic_field_squared =
           (magnetic_field_squared / (square(get(*lorentz_factor)[i]))) +
           square(magnetic_field_dot_v);
-      if ((get(*rest_mass_density)[i] <
-           comoving_magnetic_field_squared / sigma_bound) ||
-          (get(*pressure)[i] <
-           comoving_magnetic_field_squared / (2.0 * beta_bound))) {
+
+      // We only need to apply the magnetization limit if the magnetic field
+      // is non-zero and either the magnetization or inverse plasma beta is
+      // too large.
+      if ((get(magnetic_field_squared)[i] > 0.0) and
+          ((get(*rest_mass_density)[i] <
+            comoving_magnetic_field_squared / sigma_bound) or
+           (get(*pressure)[i] <
+            comoving_magnetic_field_squared / (2.0 * beta_bound)))) {
         apply_magnetization_limit(
             rest_mass_density, specific_internal_energy, temperature, pressure,
             spatial_velocity, lorentz_factor, electron_fraction, magnetic_field,
@@ -454,7 +459,7 @@ bool FixToAtmosphere<Dim>::apply_kappa_limit(
 
   using std::abs;
   if (density < opts.density_lower_bound) {
-    if (abs(temp - min_temperature) > opts.eplison_kappa_minus * abs(temp)) {
+    if (abs(temp - min_temperature) > opts.epsilon_kappa_minus * abs(temp)) {
       temp = min_temperature;
     }
     return true;
@@ -497,16 +502,16 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
   const double sigma_bound = opts.magnetization_bound;
   const double beta_bound = opts.inverse_plasma_beta_bound;
 
-  // old rest mass density * specific enthalpy before we
-  // apply flooring on rest mass density, pressure, and specific internal
-  // energy based on magnetic field strength.
-  const double old_wg = get(*rest_mass_density)[grid_index] +
-                        get(*rest_mass_density)[grid_index] *
-                            get(*specific_internal_energy)[grid_index] +
-                        get(*pressure)[grid_index];
+  // old rest mass density * specific enthalpy before we apply flooring on
+  // rest mass density, pressure, and specific internal energy based on
+  // magnetic field strength.
+  const double old_rho_h = get(*rest_mass_density)[grid_index] +
+                           get(*rest_mass_density)[grid_index] *
+                               get(*specific_internal_energy)[grid_index] +
+                           get(*pressure)[grid_index];
   // Increment rest_mass_density and temperature until magnetization and beta
   // are bounded above by some prescribed values. This is to ensure that we are
-  // not in extremly magnetized regions in our simulation which could lead to
+  // not in extremely magnetized regions in our simulation which could lead to
   // failure with primitive recovery.
 
   get(*rest_mass_density)[grid_index] =
@@ -517,6 +522,7 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
           comoving_magnetic_field_squared / (2 * beta_bound));
 
   const Scalar<double> updated_density{get(*rest_mass_density)[grid_index]};
+
   // Since all the EoS functions take either temperature or
   // specific_internal_energy recast the incrementation in pressure into
   // incrementation in temperature.
@@ -584,16 +590,17 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
   }
 
   // compute rest mass density * specific enthalpy
-  const double new_wg = get(*rest_mass_density)[grid_index] +
-                        get(*rest_mass_density)[grid_index] *
-                            get(*specific_internal_energy)[grid_index] +
-                        get(*pressure)[grid_index];
+  const double new_rho_h = get(*rest_mass_density)[grid_index] +
+                           get(*rest_mass_density)[grid_index] *
+                               get(*specific_internal_energy)[grid_index] +
+                           get(*pressure)[grid_index];
 
   // We only need to do this if non-zero velocity and if rest mass density
   // times specific enthalpy has been increased.
   // The latter should be always true the way that we applied flooring but
   // we do this for sanity check.
-  if (velocity_squared > 1.e-15 && new_wg > old_wg) {
+  if ((velocity_squared > std::numeric_limits<double>::epsilon()) and
+      (new_rho_h > old_rho_h)) {
     const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
     const double v_parallel = magnetic_field_dot_v / magnetic_field_magnitude;
     const double lorentz_factor_v = get(*lorentz_factor)[grid_index];
@@ -601,7 +608,7 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
         1.0 / sqrt(square(v_parallel) + (1.0 / (square(lorentz_factor_v))));
     const double x =
         (2 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
-        (old_wg / new_wg);
+        (old_rho_h / new_rho_h);
 
     const double new_v_parallel =
         (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
@@ -609,7 +616,14 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
     if (abs(new_v_parallel) > abs(v_parallel)) {
       ERROR(
           "the parallel component of the velocity is increased "
-          "instead of being reduced!!");
+          "instead of being reduced!!\n"
+          "v_parallel = "
+          << v_parallel << "\nnew_v_parallel = " << new_v_parallel
+          << "\nold_rho_h = " << old_rho_h << "\nnew_rho_h = " << new_rho_h
+          << "\nmagnetic_field_magnitude = " << magnetic_field_magnitude
+          << "\nlorentz_factor_v = " << lorentz_factor_v
+          << "\nlorentz_factor_perp = " << lorentz_factor_perp
+          << "\nx = " << x);
     }
     // readjust the spatial velocity
     for (size_t j = 0; j < Dim; ++j) {
@@ -628,7 +642,7 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
                                 spatial_metric.get(j, k)[grid_index];
       }
     }
-    // readjust the loretnz_factor
+    // readjust the Lorentz factor
     get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
   }
 }
@@ -675,7 +689,7 @@ bool FixToAtmosphere<Dim>::VelocityLimitingOptions::operator!=(
 template <size_t Dim>
 void FixToAtmosphere<Dim>::KappaLimitingOptions::pup(PUP::er& p) {
   p | density_lower_bound;
-  p | eplison_kappa_minus;
+  p | epsilon_kappa_minus;
   p | density_upper_bound;
   p | epsilon_kappa_max;
   p | min_temperature;
@@ -686,7 +700,7 @@ template <size_t Dim>
 bool FixToAtmosphere<Dim>::KappaLimitingOptions::operator==(
     const KappaLimitingOptions& rhs) const {
   return density_lower_bound == rhs.density_lower_bound and
-         eplison_kappa_minus == rhs.eplison_kappa_minus and
+         epsilon_kappa_minus == rhs.epsilon_kappa_minus and
          density_upper_bound == rhs.density_upper_bound and
          epsilon_kappa_max == rhs.epsilon_kappa_max and
          min_temperature == rhs.min_temperature and
