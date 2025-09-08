@@ -258,7 +258,8 @@ void test(const BoundaryConditionType& boundary_condition,
   using Vlo =
       typename VariableFixing::FixToAtmosphere<3>::VelocityLimitingOptions;
   const VariableFixing::FixToAtmosphere<3> variable_fixer{
-      1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11}, std::nullopt};
+      1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11}, std::nullopt,
+      std::nullopt};
 
   // create a box for test
   auto box = db::create<db::AddSimpleTags<
