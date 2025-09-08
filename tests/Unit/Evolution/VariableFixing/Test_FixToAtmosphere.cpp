@@ -344,7 +344,7 @@ void test_variable_fixer() {
   CHECK(not variable_fixer.kappa_limiting().has_value());
   REQUIRE(variable_fixer_klo.kappa_limiting().has_value());
   CHECK(variable_fixer_klo.kappa_limiting()->density_lower_bound == 3.e-12);
-  CHECK(variable_fixer_klo.kappa_limiting()->eplison_kappa_minus == 1.e-3);
+  CHECK(variable_fixer_klo.kappa_limiting()->epsilon_kappa_minus == 1.e-3);
   CHECK(variable_fixer_klo.kappa_limiting()->density_upper_bound == 3.e-11);
   CHECK(variable_fixer_klo.kappa_limiting()->epsilon_kappa_max == 0.01);
   CHECK(variable_fixer_klo.kappa_limiting()->min_temperature == std::nullopt);
@@ -373,7 +373,7 @@ void test_variable_fixer() {
           "  TransitionDensityBound: 1.0e-11\n"
           "KappaLimiting:\n"
           "  DensityLowerBound: 3.0e-12\n"
-          "  EplisonKappaMinus: 1.0e-3\n"
+          "  EpsilonKappaMinus: 1.0e-3\n"
           "  DensityUpperBound: 3.0e-11\n"
           "  EpsilonKappaMax: 0.01\n"
           "  MinTemperature: 1.0e-3\n"
