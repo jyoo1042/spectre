@@ -283,7 +283,8 @@ void BoundaryConditionGhostData<System>::apply(
           make_not_null(
               &get<hydro::Tags::Pressure<DataVector>>(temp_hydro_vars)),
           make_not_null(&get<Temperature>(ghost_data_vars)),
-          get<ElectronFraction>(ghost_data_vars), spatial_metric,
+          get<ElectronFraction>(ghost_data_vars),
+          get<MagneticField>(ghost_data_vars), spatial_metric,
           equation_of_state);
     }
   }  // for (direction : external boundaries)

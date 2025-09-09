@@ -64,9 +64,9 @@ void test_variable_fixer(
   const Scalar<DataVector> expected_density{
       use_magnetization_limiting ? DataVector{1.e-12, 2.e-11, 4.e-12, 8e-10}
                                  : DataVector{1.e-12, 2.e-11, 4.e-12, 4.e-10}};
-  auto expected_pressure =
+  const auto expected_pressure =
       equation_of_state.pressure_from_density(expected_density);
-  auto expected_specific_internal_energy =
+  const auto expected_specific_internal_energy =
       equation_of_state.specific_internal_energy_from_density(expected_density);
   Scalar<DataVector> expected_lorentz_factor{DataVector{
       1.0, 7.0710678118654752, 1.0000000001020408, 1.41421356237309492343}};
@@ -110,7 +110,7 @@ void test_variable_fixer(
   CHECK_ITERABLE_APPROX(specific_internal_energy,
                         expected_specific_internal_energy);
 
-  Approx approx = Approx::custom().epsilon(1.e-9);
+  const Approx approx = Approx::custom().epsilon(1.e-9);
   CHECK_ITERABLE_CUSTOM_APPROX(lorentz_factor, expected_lorentz_factor, approx);
   CHECK_ITERABLE_CUSTOM_APPROX(spatial_velocity, expected_spatial_velocity,
                                approx);
@@ -184,7 +184,7 @@ void test_variable_fixer(
                                                     density_lower_bound)))})));
   };
 
-  Scalar<DataVector> expected_specific_internal_energy{
+  const Scalar<DataVector> expected_specific_internal_energy{
       use_kappa_limiting
           ? (min_temperature == 0.0 ? DataVector{4, 0.}
                                     :  // do more complicated kappa limiting
@@ -200,8 +200,9 @@ void test_variable_fixer(
                         .specific_internal_energy_from_density_and_temperature(
                             Scalar<double>(get(expected_density)[3]),
                             Scalar<double>(0.)))}};
-  auto expected_pressure = equation_of_state.pressure_from_density_and_energy(
-      expected_density, expected_specific_internal_energy);
+  const auto expected_pressure =
+      equation_of_state.pressure_from_density_and_energy(
+          expected_density, expected_specific_internal_energy);
   auto expected_temperature =
       equation_of_state.temperature_from_density_and_energy(
           expected_density, expected_specific_internal_energy);
@@ -316,7 +317,7 @@ void test_variable_fixer() {
   const VariableFixing::FixToAtmosphere<Dim> variable_fixer_mlo{
       1.e-12, 3.e-12, Vlo{0.0, 1.e-4, 3.e-12, 1.e-11}, std::nullopt,
       Mlo{1.e2, 1.e3}};
-  EquationsOfState::PolytropicFluid<true> polytrope{1.0, 2.0};
+  const EquationsOfState::PolytropicFluid<true> polytrope{1.0, 2.0};
   test_variable_fixer<Dim>(variable_fixer, polytrope);
   test_variable_fixer<Dim>(variable_fixer_klo, polytrope);
   test_variable_fixer<Dim>(variable_fixer_mlo, polytrope);
@@ -397,7 +398,7 @@ void test_variable_fixer() {
   test_variable_fixer(fixer_from_options_mlo, polytrope);
 
   // Test for representative 2-d equation of state
-  EquationsOfState::IdealFluid<true> ideal_fluid{5.0 / 3.0};
+  const EquationsOfState::IdealFluid<true> ideal_fluid{5.0 / 3.0};
   test_variable_fixer<Dim>(variable_fixer, ideal_fluid, false, 0.0);
   test_variable_fixer<Dim>(variable_fixer_klo, ideal_fluid, true, 0.0);
   test_variable_fixer<Dim>(variable_fixer_mlo, ideal_fluid);
