@@ -89,7 +89,7 @@ VariableFixing:
       TransitionDensityBound: 3.0e-14
     KappaLimiting:
       DensityLowerBound: 2.0e-14
-      EplisonKappaMinus: 1.0e-3
+      EpsilonKappaMinus: 1.0e-3
       DensityUpperBound: 2.0e-13
       EpsilonKappaMax: 0.01
       LimitAboveDensityUpperBound: False
