@@ -209,9 +209,15 @@ std::optional<PrimitiveRecoveryData> KastaunEtAlHydro::apply(
 
   // z is W * v  (Lorentz factor * velocity)
   double z = std::numeric_limits<double>::signaling_NaN();
+  double lower_bound = std::numeric_limits<double>::signaling_NaN();
+  double upper_bound = std::numeric_limits<double>::signaling_NaN();
+  double f_at_lower = std::numeric_limits<double>::signaling_NaN();
+  double f_at_upper = std::numeric_limits<double>::signaling_NaN();
   try {
     // Bracket for master function
-    const auto [lower_bound, upper_bound] = f_of_z.root_bracket();
+    std::tie(lower_bound, upper_bound) = f_of_z.root_bracket();
+    f_at_lower = f_of_z(lower_bound);
+    f_at_upper = f_of_z(upper_bound);
 
     // Try to recover primitves
     z =
@@ -220,6 +226,18 @@ std::optional<PrimitiveRecoveryData> KastaunEtAlHydro::apply(
                             absolute_tolerance_, relative_tolerance_,
                             max_iterations_);
   } catch (std::exception& exception) {
+    fprintf(stderr,
+            "KastaunEtAlHydro failed: %s\n"
+            "  tau                                = %.17e\n"
+            "  rest_mass_density_times_lorentz_factor = %.17e\n"
+            "  momentum_density_squared           = %.17e\n"
+            "  lower_bound                        = %.17e\n"
+            "  upper_bound                        = %.17e\n"
+            "  f_at_lower                         = %.17e\n"
+            "  f_at_upper                         = %.17e\n",
+            exception.what(), tau, rest_mass_density_times_lorentz_factor,
+            momentum_density_squared, lower_bound, upper_bound, f_at_lower,
+            f_at_upper);
     return std::nullopt;
   }
 
