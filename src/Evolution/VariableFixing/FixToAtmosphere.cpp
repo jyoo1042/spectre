@@ -15,6 +15,7 @@
 #include "Options/Options.hpp"
 #include "Options/ParseError.hpp"
 #include "Options/ParseOptions.hpp"
+#include "Utilities/ErrorHandling/CaptureForError.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/GenerateInstantiations.hpp"
 #include "Utilities/GetOutput.hpp"
@@ -625,6 +626,27 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
                                 spatial_velocity->get(k)[grid_index] *
                                 spatial_metric.get(j, k)[grid_index];
       }
+    }
+    CAPTURE_FOR_ERROR(grid_index);
+    CAPTURE_FOR_ERROR(velocity_squared);
+    CAPTURE_FOR_ERROR(new_velocity_squared);
+    CAPTURE_FOR_ERROR(old_wg);
+    CAPTURE_FOR_ERROR(new_wg);
+    CAPTURE_FOR_ERROR(magnetic_field_squared);
+    CAPTURE_FOR_ERROR(comoving_magnetic_field_squared);
+    CAPTURE_FOR_ERROR(magnetic_field_dot_v);
+    CAPTURE_FOR_ERROR(magnetic_field_magnitude);
+    CAPTURE_FOR_ERROR(v_parallel);
+    CAPTURE_FOR_ERROR(lorentz_factor_v);
+    CAPTURE_FOR_ERROR(lorentz_factor_perp);
+    CAPTURE_FOR_ERROR(x);
+    CAPTURE_FOR_ERROR(new_v_parallel);
+    if (UNLIKELY(new_velocity_squared >= 1.0)) {
+      ERROR(
+          "apply_magnetization_limit produced a superluminal velocity: "
+          "new_velocity_squared = "
+          << new_velocity_squared
+          << " >= 1. See captured variables above for details.");
     }
     get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
   }
