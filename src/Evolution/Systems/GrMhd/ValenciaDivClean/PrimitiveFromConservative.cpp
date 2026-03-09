@@ -291,7 +291,8 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
       if constexpr (ErrorOnFailure) {
         ERROR("All primitive inversion schemes failed at s = "
               << s << ".\n"
-              << std::setprecision(17) << "tau = " << tau[s] << "\n"
+              << std::setprecision(17)
+              << "tau = " << tau[s] << "\n"
               << "rest_mass_density_times_lorentz_factor = "
               << rest_mass_density_times_lorentz_factor[s] << "\n"
               << "momentum_density_squared = "
@@ -300,13 +301,19 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
               << get(momentum_density_dot_magnetic_field)[s] << "\n"
               << "magnetic_field_squared = " << get(magnetic_field_squared)[s]
               << "\n"
-              << "rest_mass_density_times_lorentz_factor = "
-              << rest_mass_density_times_lorentz_factor[s] << "\n"
               << "previous_rest_mass_density = " << get(*rest_mass_density)[s]
               << "\n"
               << "previous_pressure = " << get(*pressure)[s] << "\n"
               << "previous_lorentz_factor = " << get(*lorentz_factor)[s]
-              << "\n");
+              << "\n"
+              << "sqrt_det_spatial_metric = "
+              << get(sqrt_det_spatial_metric)[s] << "\n"
+              << "tilde_d = " << get(tilde_d)[s] << "\n"
+              << "tilde_tau = " << get(tilde_tau)[s] << "\n"
+              << "tilde_s = (" << tilde_s.get(0)[s] << ", "
+              << tilde_s.get(1)[s] << ", " << tilde_s.get(2)[s] << ")\n"
+              << "tilde_b = (" << tilde_b.get(0)[s] << ", "
+              << tilde_b.get(1)[s] << ", " << tilde_b.get(2)[s] << ")\n");
       } else {
         return false;
       }
