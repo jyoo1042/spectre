@@ -30,6 +30,7 @@
 #include "PointwiseFunctions/Hydro/Tags.hpp"
 #include "Utilities/CallWithDynamicType.hpp"
 #include "Utilities/ConstantExpressions.hpp"
+#include "Utilities/ErrorHandling/CaptureForError.hpp"
 #include "Utilities/ErrorHandling/Error.hpp"
 #include "Utilities/GenerateInstantiations.hpp"
 #include "Utilities/Gsl.hpp"
@@ -282,6 +283,67 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
         }
       }
       get(*lorentz_factor)[s] = primitive_data.value().lorentz_factor;
+      // Consistency check: verify v^2 = 1 - 1/W^2
+      {
+        double velocity_squared = 0.0;
+        for (size_t j = 0; j < 3; ++j) {
+          velocity_squared += spatial_velocity->get(j)[s] *
+                              spatial_velocity->get(j)[s] *
+                              spatial_metric.get(j, j)[s];
+          for (size_t k = j + 1; k < 3; ++k) {
+            velocity_squared += 2.0 * spatial_velocity->get(j)[s] *
+                                spatial_velocity->get(k)[s] *
+                                spatial_metric.get(j, k)[s];
+          }
+        }
+        const double lorentz_factor_v = primitive_data.value().lorentz_factor;
+        const double velocity_squared_from_w =
+            1.0 - 1.0 / square(lorentz_factor_v);
+        CAPTURE_FOR_ERROR(s);
+        CAPTURE_FOR_ERROR(velocity_squared);
+        CAPTURE_FOR_ERROR(lorentz_factor_v);
+        CAPTURE_FOR_ERROR(velocity_squared_from_w);
+        if (UNLIKELY(velocity_squared >= 1.0)) {
+          ERROR("Lorentz factor and spatial velocity are inconsistent after "
+                "primitive recovery at s = "
+                << s << ".\n"
+                << std::setprecision(17)
+                << "velocity_squared (from v^i)         = " << velocity_squared
+                << "\nvelocity_squared (from W)          = "
+                << velocity_squared_from_w
+                << "\nlorentz_factor                     = " << lorentz_factor_v
+                << "\nrest_mass_density                  = "
+                << primitive_data.value().rest_mass_density
+                << "\npressure                           = "
+                << primitive_data.value().pressure
+                << "\nspecific_internal_energy           = "
+                << primitive_data.value().specific_internal_energy
+                << "\nrho_h_w_squared                    = "
+                << primitive_data.value().rho_h_w_squared
+                << "\nmomentum_density_dot_magnetic_field = "
+                << get(momentum_density_dot_magnetic_field)[s]
+                << "\nsqrt_det_spatial_metric            = "
+                << get(sqrt_det_spatial_metric)[s]
+                << "\nmagnetic_field_squared             = "
+                << get(magnetic_field_squared)[s]
+                << "\nmomentum_density_squared           = "
+                << get(momentum_density_squared)[s]
+                << "\nrest_mass_density_times_W          = "
+                << rest_mass_density_times_lorentz_factor[s]
+                << "\ntilde_s_upper = ("
+                << tilde_s_upper.get(0)[s] << ", "
+                << tilde_s_upper.get(1)[s] << ", "
+                << tilde_s_upper.get(2)[s] << ")"
+                << "\ntilde_s = ("
+                << tilde_s.get(0)[s] << ", "
+                << tilde_s.get(1)[s] << ", "
+                << tilde_s.get(2)[s] << ")"
+                << "\nmagnetic_field = ("
+                << magnetic_field->get(0)[s] << ", "
+                << magnetic_field->get(1)[s] << ", "
+                << magnetic_field->get(2)[s] << ")");
+        }
+      }
       get(*pressure)[s] = primitive_data.value().pressure;
       if constexpr (not eos_is_barotropic) {
         get(*specific_internal_energy)[s] =
