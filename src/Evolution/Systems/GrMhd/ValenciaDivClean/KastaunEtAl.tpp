@@ -210,6 +210,10 @@ FunctionOfMu<EnforcePhysicality, EosType>::root_bracket(
                             absolute_tolerance, relative_tolerance,
                             max_iterations);
   }
+  // Nudge upper_bound slightly above mu_+ to ensure f(upper_bound) > 0
+  // numerically. The auxiliary function root and the master function zero
+  // coincide in exact arithmetic, but floating point can yield f(mu_+) < 0.
+  upper_bound *= (1.0 + 1.0e-8);
 
   // Determine if the corner case discussed in Appendix A occurs where the
   // mass density is outside the valid range of the EOS
@@ -367,17 +371,33 @@ std::optional<PrimitiveRecoveryData> KastaunEtAl::apply(
           equation_of_state,
           primitive_from_conservative_options.kastaun_max_lorentz_factor()};
   if (f_of_mu.state_is_unphysical()) {
+    fprintf(stderr,
+            "KastaunEtAl: state is unphysical\n"
+            "  tau                                    = %.17e\n"
+            "  rest_mass_density_times_lorentz_factor = %.17e\n"
+            "  momentum_density_squared               = %.17e\n"
+            "  momentum_density_dot_magnetic_field    = %.17e\n"
+            "  magnetic_field_squared                 = %.17e\n",
+            tau, rest_mass_density_times_lorentz_factor,
+            momentum_density_squared, momentum_density_dot_magnetic_field,
+            magnetic_field_squared);
     return std::nullopt;
   }
 
   // mu is 1 / (h W) see Equation (26)
   double one_over_specific_enthalpy_times_lorentz_factor =
       std::numeric_limits<double>::signaling_NaN();
+  double lower_bound = std::numeric_limits<double>::signaling_NaN();
+  double upper_bound = std::numeric_limits<double>::signaling_NaN();
+  double f_at_lower = std::numeric_limits<double>::signaling_NaN();
+  double f_at_upper = std::numeric_limits<double>::signaling_NaN();
   try {
     // Bracket for master function, see Sec. II.F
-    const auto [lower_bound, upper_bound] = f_of_mu.root_bracket(
+    std::tie(lower_bound, upper_bound) = f_of_mu.root_bracket(
         rest_mass_density_times_lorentz_factor, absolute_tolerance_,
         relative_tolerance_, max_iterations_);
+    f_at_lower = f_of_mu(lower_bound);
+    f_at_upper = f_of_mu(upper_bound);
 
     // Try to recover primitves
     one_over_specific_enthalpy_times_lorentz_factor =
@@ -386,6 +406,21 @@ std::optional<PrimitiveRecoveryData> KastaunEtAl::apply(
                             absolute_tolerance_, relative_tolerance_,
                             max_iterations_);
   } catch (std::exception& exception) {
+    fprintf(stderr,
+            "KastaunEtAl failed: %s\n"
+            "  tau                                    = %.17e\n"
+            "  rest_mass_density_times_lorentz_factor = %.17e\n"
+            "  momentum_density_squared               = %.17e\n"
+            "  momentum_density_dot_magnetic_field    = %.17e\n"
+            "  magnetic_field_squared                 = %.17e\n"
+            "  lower_bound                            = %.17e\n"
+            "  upper_bound                            = %.17e\n"
+            "  f_at_lower                             = %.17e\n"
+            "  f_at_upper                             = %.17e\n",
+            exception.what(), tau, rest_mass_density_times_lorentz_factor,
+            momentum_density_squared, momentum_density_dot_magnetic_field,
+            magnetic_field_squared, lower_bound, upper_bound,
+            f_at_lower, f_at_upper);
     return std::nullopt;
   }
 
