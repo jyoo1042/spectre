@@ -282,6 +282,31 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
         }
       }
       get(*lorentz_factor)[s] = primitive_data.value().lorentz_factor;
+      // Consistency check: verify v^2 = 1 - 1/W^2, and rescale if inconsistent.
+      {
+        double velocity_squared = 0.0;
+        for (size_t j = 0; j < 3; ++j) {
+          velocity_squared += spatial_velocity->get(j)[s] *
+                              spatial_velocity->get(j)[s] *
+                              spatial_metric.get(j, j)[s];
+          for (size_t k = j + 1; k < 3; ++k) {
+            velocity_squared += 2.0 * spatial_velocity->get(j)[s] *
+                                spatial_velocity->get(k)[s] *
+                                spatial_metric.get(j, k)[s];
+          }
+        }
+        const double lorentz_factor_v = primitive_data.value().lorentz_factor;
+        const double velocity_squared_from_w =
+            1.0 - 1.0 / square(lorentz_factor_v);
+        if (UNLIKELY(velocity_squared > 0.0 and
+                     velocity_squared != velocity_squared_from_w)) {
+          const double rescale_factor =
+              std::sqrt(velocity_squared_from_w / velocity_squared);
+          for (size_t i = 0; i < 3; ++i) {
+            spatial_velocity->get(i)[s] *= rescale_factor;
+          }
+        }
+      }
       get(*pressure)[s] = primitive_data.value().pressure;
       if constexpr (not eos_is_barotropic) {
         get(*specific_internal_energy)[s] =
@@ -291,7 +316,8 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
       if constexpr (ErrorOnFailure) {
         ERROR("All primitive inversion schemes failed at s = "
               << s << ".\n"
-              << std::setprecision(17) << "tau = " << tau[s] << "\n"
+              << std::setprecision(17)
+              << "tau = " << tau[s] << "\n"
               << "rest_mass_density_times_lorentz_factor = "
               << rest_mass_density_times_lorentz_factor[s] << "\n"
               << "momentum_density_squared = "
@@ -300,13 +326,19 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
               << get(momentum_density_dot_magnetic_field)[s] << "\n"
               << "magnetic_field_squared = " << get(magnetic_field_squared)[s]
               << "\n"
-              << "rest_mass_density_times_lorentz_factor = "
-              << rest_mass_density_times_lorentz_factor[s] << "\n"
               << "previous_rest_mass_density = " << get(*rest_mass_density)[s]
               << "\n"
               << "previous_pressure = " << get(*pressure)[s] << "\n"
               << "previous_lorentz_factor = " << get(*lorentz_factor)[s]
-              << "\n");
+              << "\n"
+              << "sqrt_det_spatial_metric = "
+              << get(sqrt_det_spatial_metric)[s] << "\n"
+              << "tilde_d = " << get(tilde_d)[s] << "\n"
+              << "tilde_tau = " << get(tilde_tau)[s] << "\n"
+              << "tilde_s = (" << tilde_s.get(0)[s] << ", "
+              << tilde_s.get(1)[s] << ", " << tilde_s.get(2)[s] << ")\n"
+              << "tilde_b = (" << tilde_b.get(0)[s] << ", "
+              << tilde_b.get(1)[s] << ", " << tilde_b.get(2)[s] << ")\n");
       } else {
         return false;
       }
