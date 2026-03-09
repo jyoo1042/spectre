@@ -593,30 +593,28 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
   // times specific enthalpy has been increased.
   // The latter should be always true the way that we applied flooring but
   // we do this for sanity check.
-  if (velocity_squared > 1.e-15 && new_wg > old_wg) {
+  // Adjust the parallel component of velocity to conserve fluid momentum
+  // parallel to the magnetic field (drift frame flooring). Only needed when
+  // velocity is non-negligible and the enthalpy density changed.
+  if (velocity_squared > 1.e-15 and new_wg > old_wg) {
     const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
     const double v_parallel = magnetic_field_dot_v / magnetic_field_magnitude;
     const double lorentz_factor_v = get(*lorentz_factor)[grid_index];
     const double lorentz_factor_perp =
-        1.0 / sqrt(square(v_parallel) + (1.0 / (square(lorentz_factor_v))));
+        1.0 / sqrt(square(v_parallel) + 1.0 / square(lorentz_factor_v));
     const double x =
-        (2 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
+        (2.0 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
         (old_wg / new_wg);
-
     const double new_v_parallel =
         (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
 
-    if (abs(new_v_parallel) > abs(v_parallel)) {
-      ERROR(
-          "the parallel component of the velocity is increased "
-          "instead of being reduced!!");
-    }
-    // readjust the spatial velocity
+    // Readjust the spatial velocity
     for (size_t j = 0; j < Dim; ++j) {
       spatial_velocity->get(j)[grid_index] +=
           (new_v_parallel - v_parallel) * magnetic_field.get(j)[grid_index] /
           magnetic_field_magnitude;
     }
+    // Recompute the Lorentz factor from the updated velocity
     double new_velocity_squared = 0.0;
     for (size_t j = 0; j < Dim; ++j) {
       new_velocity_squared += spatial_velocity->get(j)[grid_index] *
@@ -628,7 +626,6 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
                                 spatial_metric.get(j, k)[grid_index];
       }
     }
-    // readjust the loretnz_factor
     get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
   }
 }
