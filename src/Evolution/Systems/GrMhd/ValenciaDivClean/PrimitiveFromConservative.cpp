@@ -164,6 +164,14 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
 
   DataVector& tau = get(get<::Tags::TempScalar<0>>(temp_buffer));
   tau = get(tilde_tau) / get(sqrt_det_spatial_metric);
+  // Floor tau to zero: negative values are unphysical (total energy below rest
+  // mass energy) and arise from truncation error in the energy equation in
+  // low-density regions. Kastaun's EnforcePhysicality path clamps q=tau/(rho*W)
+  // to eps_min anyway, but a negative tau can corrupt the r_squared bound and
+  // lead to a spurious superluminal root.
+  for (size_t s = 0; s < number_of_points; ++s) {
+    tau[s] = std::max(tau[s], 0.0);
+  }
 
   tnsr::I<DataVector, 3, Frame::Inertial>& tilde_s_upper =
       get<::Tags::TempI<5, 3, Frame::Inertial>>(temp_buffer);
