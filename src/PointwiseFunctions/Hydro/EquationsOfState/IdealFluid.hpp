@@ -128,10 +128,11 @@ class IdealFluid : public EquationOfState<IsRelativistic, 2> {
   /// If non-zero lower bound for temperature is provided, then the lower bound
   /// for specific internal enthalpy is also non-zero accordingly.
   double specific_enthalpy_lower_bound() const override {
-    return IsRelativistic ? 1.0 + (adiabatic_index_ * min_temperature_) /
-                                      (adiabatic_index_ - 1.0)
-                          : (adiabatic_index_ * min_temperature_) /
-                                (adiabatic_index_ - 1.0);
+    // return IsRelativistic ? 1.0 + (adiabatic_index_ * min_temperature_) /
+    //                                   (adiabatic_index_ - 1.0)
+    //                       : (adiabatic_index_ * min_temperature_) /
+    //                             (adiabatic_index_ - 1.0);
+    return IsRelativistic ? 1.0 : 0.0;
   }
 
   /// The lower bound of the temperature that is valid for this EOS.
