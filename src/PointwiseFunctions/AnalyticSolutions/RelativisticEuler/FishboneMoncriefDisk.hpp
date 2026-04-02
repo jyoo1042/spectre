@@ -441,8 +441,8 @@ class FishboneMoncriefDisk
   // Thus, we instead initialize the background values that most closely
   // matches the radial profiles of EHT Code Comparison Project initial data
   // without introducing any weird kinks.
-  double background_density_ = 1.e-7;
-  double background_temperature_ = 2.e-5;
+  double background_density_ = 2.6e-8;
+  double background_temperature_ = 6.3e-5;
   double background_pressure_ = std::numeric_limits<double>::signaling_NaN();
   double background_specific_internal_energy_ =
       std::numeric_limits<double>::signaling_NaN();
