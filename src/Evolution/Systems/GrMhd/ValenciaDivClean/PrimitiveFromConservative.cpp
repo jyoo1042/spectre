@@ -120,6 +120,12 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
   const double floorD =
       primitive_from_conservative_options.density_when_skipping_inversion();
 
+  // Lorentz factor cap for Kastaun scheme.
+  const double kastaun_max_lorentz_factor =
+      primitive_from_conservative_options.kastaun_max_lorentz_factor();
+  const double max_velocity_squared =
+      1.0 - 1.0 / square(kastaun_max_lorentz_factor);
+
   // If the max over the grid is below the cutoff, then just don't do any
   // work because everything will get reset to atmosphere.
   if (max(get(tilde_d)) < cutoffD) {
@@ -282,7 +288,9 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
         }
       }
       get(*lorentz_factor)[s] = primitive_data.value().lorentz_factor;
-      // Consistency check: verify v^2 = 1 - 1/W^2, and rescale if inconsistent.
+      // if velocity over is above max velocity, then set lortenz
+      // factor to max and rescale velocity to max. Otherwise, rescale
+      // velocity to be consistent with Lorentz factor.
       {
         double velocity_squared = 0.0;
         for (size_t j = 0; j < 3; ++j) {
@@ -297,13 +305,22 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
         }
         const double lorentz_factor_v = primitive_data.value().lorentz_factor;
         const double velocity_squared_from_w =
-            1.0 - 1.0 / square(lorentz_factor_v);
-        if (UNLIKELY(velocity_squared > 0.0 and
-                     velocity_squared != velocity_squared_from_w)) {
-          const double rescale_factor =
-              std::sqrt(velocity_squared_from_w / velocity_squared);
-          for (size_t i = 0; i < 3; ++i) {
-            spatial_velocity->get(i)[s] *= rescale_factor;
+            std::max(1.0 - 1.0 / square(lorentz_factor_v), 0.0);
+        if (velocity_squared > 0.0 and
+            abs(velocity_squared - velocity_squared_from_w) > 1.e-5) {
+          if (velocity_squared >= max_velocity_squared) {
+            get(*lorentz_factor)[s] = kastaun_max_lorentz_factor;
+            const double rescale_factor =
+                std::sqrt(max_velocity_squared / velocity_squared);
+            for (size_t i = 0; i < 3; ++i) {
+              spatial_velocity->get(i)[s] *= rescale_factor;
+            }
+          } else {
+            const double rescale_factor =
+                std::sqrt(velocity_squared_from_w / velocity_squared);
+            for (size_t i = 0; i < 3; ++i) {
+              spatial_velocity->get(i)[s] *= rescale_factor;
+            }
           }
         }
       }
