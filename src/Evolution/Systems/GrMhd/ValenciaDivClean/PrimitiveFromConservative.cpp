@@ -316,11 +316,14 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
               spatial_velocity->get(i)[s] *= rescale_factor;
             }
           } else {
-            const double rescale_factor =
-                std::sqrt(velocity_squared_from_w / velocity_squared);
-            for (size_t i = 0; i < 3; ++i) {
-              spatial_velocity->get(i)[s] *= rescale_factor;
-            }
+            const double lorentz_factor_from_v =
+                1.0 / sqrt(1.0 - velocity_squared);
+            get(*lorentz_factor)[s] = lorentz_factor_from_v;
+            // const double rescale_factor =
+            //     std::sqrt(velocity_squared_from_w / velocity_squared);
+            // for (size_t i = 0; i < 3; ++i) {
+            //   spatial_velocity->get(i)[s] *= rescale_factor;
+            // }
           }
         }
       }
