@@ -572,23 +572,23 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
   // spatial velocity. To do this, we follow what's commonly referred to as the
   // drift frame flooring.
 
-  double velocity_squared = 0.0;
-  for (size_t j = 0; j < Dim; ++j) {
-    velocity_squared += spatial_velocity->get(j)[grid_index] *
-                        spatial_velocity->get(j)[grid_index] *
-                        spatial_metric.get(j, j)[grid_index];
-    for (size_t k = j + 1; k < Dim; ++k) {
-      velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
-                          spatial_velocity->get(k)[grid_index] *
-                          spatial_metric.get(j, k)[grid_index];
-    }
-  }
+  // double velocity_squared = 0.0;
+  // for (size_t j = 0; j < Dim; ++j) {
+  //   velocity_squared += spatial_velocity->get(j)[grid_index] *
+  //                       spatial_velocity->get(j)[grid_index] *
+  //                       spatial_metric.get(j, j)[grid_index];
+  //   for (size_t k = j + 1; k < Dim; ++k) {
+  //     velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
+  //                         spatial_velocity->get(k)[grid_index] *
+  //                         spatial_metric.get(j, k)[grid_index];
+  //   }
+  // }
 
-  // compute rest mass density * specific enthalpy
-  const double new_wg = get(*rest_mass_density)[grid_index] +
-                        get(*rest_mass_density)[grid_index] *
-                            get(*specific_internal_energy)[grid_index] +
-                        get(*pressure)[grid_index];
+  // // compute rest mass density * specific enthalpy
+  // const double new_wg = get(*rest_mass_density)[grid_index] +
+  //                       get(*rest_mass_density)[grid_index] *
+  //                           get(*specific_internal_energy)[grid_index] +
+  //                       get(*pressure)[grid_index];
 
   // We only need to do this if non-zero velocity and if rest mass density
   // times specific enthalpy has been increased.
@@ -597,59 +597,60 @@ void FixToAtmosphere<Dim>::apply_magnetization_limit(
   // Adjust the parallel component of velocity to conserve fluid momentum
   // parallel to the magnetic field (drift frame flooring). Only needed when
   // velocity is non-negligible and the enthalpy density changed.
-  if (velocity_squared > 1.e-15 and new_wg > old_wg) {
-    const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
-    const double v_parallel = magnetic_field_dot_v / magnetic_field_magnitude;
-    const double lorentz_factor_v = get(*lorentz_factor)[grid_index];
-    const double lorentz_factor_perp =
-        1.0 / sqrt(square(v_parallel) + 1.0 / square(lorentz_factor_v));
-    const double x =
-        (2.0 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
-        (old_wg / new_wg);
-    const double new_v_parallel =
-        (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
+  // if (velocity_squared > 1.e-15 and new_wg > old_wg) {
+  //   const double magnetic_field_magnitude = sqrt(magnetic_field_squared);
+  //   const double v_parallel = magnetic_field_dot_v /
+  //   magnetic_field_magnitude; const double lorentz_factor_v =
+  //   get(*lorentz_factor)[grid_index]; const double lorentz_factor_perp =
+  //       1.0 / sqrt(square(v_parallel) + 1.0 / square(lorentz_factor_v));
+  //   const double x =
+  //       (2.0 * v_parallel * square(lorentz_factor_v) / lorentz_factor_perp) *
+  //       (old_wg / new_wg);
+  //   const double new_v_parallel =
+  //       (x / lorentz_factor_perp) / (1.0 + sqrt(1.0 + square(x)));
 
-    // Readjust the spatial velocity
-    for (size_t j = 0; j < Dim; ++j) {
-      spatial_velocity->get(j)[grid_index] +=
-          (new_v_parallel - v_parallel) * magnetic_field.get(j)[grid_index] /
-          magnetic_field_magnitude;
-    }
-    // Recompute the Lorentz factor from the updated velocity
-    double new_velocity_squared = 0.0;
-    for (size_t j = 0; j < Dim; ++j) {
-      new_velocity_squared += spatial_velocity->get(j)[grid_index] *
-                              spatial_velocity->get(j)[grid_index] *
-                              spatial_metric.get(j, j)[grid_index];
-      for (size_t k = j + 1; k < Dim; ++k) {
-        new_velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
-                                spatial_velocity->get(k)[grid_index] *
-                                spatial_metric.get(j, k)[grid_index];
-      }
-    }
-    CAPTURE_FOR_ERROR(grid_index);
-    CAPTURE_FOR_ERROR(velocity_squared);
-    CAPTURE_FOR_ERROR(new_velocity_squared);
-    CAPTURE_FOR_ERROR(old_wg);
-    CAPTURE_FOR_ERROR(new_wg);
-    CAPTURE_FOR_ERROR(magnetic_field_squared);
-    CAPTURE_FOR_ERROR(comoving_magnetic_field_squared);
-    CAPTURE_FOR_ERROR(magnetic_field_dot_v);
-    CAPTURE_FOR_ERROR(magnetic_field_magnitude);
-    CAPTURE_FOR_ERROR(v_parallel);
-    CAPTURE_FOR_ERROR(lorentz_factor_v);
-    CAPTURE_FOR_ERROR(lorentz_factor_perp);
-    CAPTURE_FOR_ERROR(x);
-    CAPTURE_FOR_ERROR(new_v_parallel);
-    if (UNLIKELY(new_velocity_squared >= 1.0)) {
-      ERROR(
-          "apply_magnetization_limit produced a superluminal velocity: "
-          "new_velocity_squared = "
-          << new_velocity_squared
-          << " >= 1. See captured variables above for details.");
-    }
-    get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 - new_velocity_squared);
-  }
+  //   // Readjust the spatial velocity
+  //   for (size_t j = 0; j < Dim; ++j) {
+  //     spatial_velocity->get(j)[grid_index] +=
+  //         (new_v_parallel - v_parallel) * magnetic_field.get(j)[grid_index] /
+  //         magnetic_field_magnitude;
+  //   }
+  //   // Recompute the Lorentz factor from the updated velocity
+  //   double new_velocity_squared = 0.0;
+  //   for (size_t j = 0; j < Dim; ++j) {
+  //     new_velocity_squared += spatial_velocity->get(j)[grid_index] *
+  //                             spatial_velocity->get(j)[grid_index] *
+  //                             spatial_metric.get(j, j)[grid_index];
+  //     for (size_t k = j + 1; k < Dim; ++k) {
+  //       new_velocity_squared += 2.0 * spatial_velocity->get(j)[grid_index] *
+  //                               spatial_velocity->get(k)[grid_index] *
+  //                               spatial_metric.get(j, k)[grid_index];
+  //     }
+  //   }
+  //   CAPTURE_FOR_ERROR(grid_index);
+  //   CAPTURE_FOR_ERROR(velocity_squared);
+  //   CAPTURE_FOR_ERROR(new_velocity_squared);
+  //   CAPTURE_FOR_ERROR(old_wg);
+  //   CAPTURE_FOR_ERROR(new_wg);
+  //   CAPTURE_FOR_ERROR(magnetic_field_squared);
+  //   CAPTURE_FOR_ERROR(comoving_magnetic_field_squared);
+  //   CAPTURE_FOR_ERROR(magnetic_field_dot_v);
+  //   CAPTURE_FOR_ERROR(magnetic_field_magnitude);
+  //   CAPTURE_FOR_ERROR(v_parallel);
+  //   CAPTURE_FOR_ERROR(lorentz_factor_v);
+  //   CAPTURE_FOR_ERROR(lorentz_factor_perp);
+  //   CAPTURE_FOR_ERROR(x);
+  //   CAPTURE_FOR_ERROR(new_v_parallel);
+  //   if (UNLIKELY(new_velocity_squared >= 1.0)) {
+  //     ERROR(
+  //         "apply_magnetization_limit produced a superluminal velocity: "
+  //         "new_velocity_squared = "
+  //         << new_velocity_squared
+  //         << " >= 1. See captured variables above for details.");
+  //   }
+  //   get(*lorentz_factor)[grid_index] = 1.0 / sqrt(1.0 -
+  //   new_velocity_squared);
+  // }
 }
 
 template <size_t Dim>
