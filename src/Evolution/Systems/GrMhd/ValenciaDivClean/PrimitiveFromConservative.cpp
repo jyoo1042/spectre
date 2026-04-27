@@ -3,6 +3,7 @@
 
 #include "Evolution/Systems/GrMhd/ValenciaDivClean/PrimitiveFromConservative.hpp"
 
+#include <cmath>
 #include <iomanip>
 #include <limits>
 #include <optional>
@@ -36,6 +37,91 @@
 #include "Utilities/TMPL.hpp"
 
 namespace grmhd::ValenciaDivClean {
+namespace {
+// Tolerance for checking consistency between the spatial velocity and the
+// Lorentz factor. This tolerance is compared against the absolute value
+// of the difference between the velocity squared computed from the spatial
+// velocity and the velocity squared computed from the Lorentz factor.
+// If the difference is below the tolerance, then we consider the spatial
+// velocity and Lorentz factor to be consistent. If the difference is above the
+// tolerance, then we apply the fix specified by `primitive_inconsistency_fix`,
+// which is part of `PrimitiveFromConservativeOptions`.
+constexpr double velocity_lorentz_consistency_tolerance = 1.0e-5;
+
+double spatial_velocity_squared_at_point(
+    const tnsr::I<DataVector, 3, Frame::Inertial>& spatial_velocity,
+    const tnsr::ii<DataVector, 3, Frame::Inertial>& spatial_metric,
+    const size_t s) {
+  double velocity_squared = 0.0;
+
+  for (size_t i = 0; i < 3; ++i) {
+    velocity_squared +=
+        spatial_metric.get(i, i)[s] * square(spatial_velocity.get(i)[s]);
+
+    for (size_t j = i + 1; j < 3; ++j) {
+      velocity_squared += 2.0 * spatial_metric.get(i, j)[s] *
+                          spatial_velocity.get(i)[s] *
+                          spatial_velocity.get(j)[s];
+    }
+  }
+  return velocity_squared;
+}
+
+double velocity_squared_from_lorentz_factor(const double lorentz_factor) {
+  return std::max(1.0 - 1.0 / square(lorentz_factor), 0.0);
+}
+
+void rescale_spatial_velocity_at_point(
+    const gsl::not_null<tnsr::I<DataVector, 3, Frame::Inertial>*>
+        spatial_velocity,
+    const size_t s, const double rescale_factor) {
+  for (size_t i = 0; i < 3; ++i) {
+    spatial_velocity->get(i)[s] *= rescale_factor;
+  }
+}
+
+void apply_primitive_inconsistency_fix_at_point(
+    const gsl::not_null<Scalar<DataVector>*> lorentz_factor,
+    const gsl::not_null<tnsr::I<DataVector, 3, Frame::Inertial>*>
+        spatial_velocity,
+    const tnsr::ii<DataVector, 3, Frame::Inertial>& spatial_metric,
+    const size_t s, const double recovered_lorentz_factor,
+    const double max_lorentz_factor, const double max_velocity_squared,
+    const PrimitiveInconsistencyFix primitive_inconsistency_fix) {
+  const double velocity_squared =
+      spatial_velocity_squared_at_point(*spatial_velocity, spatial_metric, s);
+
+  const double velocity_squared_from_recovered_lorentz_factor =
+      velocity_squared_from_lorentz_factor(recovered_lorentz_factor);
+
+  // Dynamically tighten the tolerance at high Lorentz factors
+  // Equivalent to checking relative error against (1 - v^2)
+  const double dynamic_tolerance =
+      velocity_lorentz_consistency_tolerance / square(recovered_lorentz_factor);
+
+  if (std::abs(velocity_squared -
+               velocity_squared_from_recovered_lorentz_factor) <=
+      dynamic_tolerance) {
+    return;
+  }
+
+  if (primitive_inconsistency_fix == PrimitiveInconsistencyFix::ScaleDown) {
+    const double rescale_factor = std::sqrt(
+        velocity_squared_from_recovered_lorentz_factor / velocity_squared);
+    rescale_spatial_velocity_at_point(spatial_velocity, s, rescale_factor);
+    return;
+  }
+
+  if (primitive_inconsistency_fix == PrimitiveInconsistencyFix::SetToCap) {
+    get(*lorentz_factor)[s] = max_lorentz_factor;
+    rescale_spatial_velocity_at_point(
+        spatial_velocity, s,
+        std::sqrt(max_velocity_squared / velocity_squared));
+    return;
+  }
+}
+}  // namespace
+
 template <typename OrderedListOfPrimitiveRecoverySchemes, bool ErrorOnFailure>
 template <bool EnforcePhysicality>
 bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
@@ -119,6 +205,14 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
       primitive_from_conservative_options.cutoff_d_for_inversion();
   const double floorD =
       primitive_from_conservative_options.density_when_skipping_inversion();
+
+  // Parameters for primitive inconsistency fix
+  const auto primitive_inconsistency_fix =
+      primitive_from_conservative_options.primitive_inconsistency_fix();
+  const double max_lorentz_factor =
+      primitive_from_conservative_options.kastaun_max_lorentz_factor();
+  const double max_velocity_squared =
+      velocity_squared_from_lorentz_factor(max_lorentz_factor);
 
   // If the max over the grid is below the cutoff, then just don't do any
   // work because everything will get reset to atmosphere.
@@ -282,6 +376,14 @@ bool PrimitiveFromConservative<OrderedListOfPrimitiveRecoverySchemes,
         }
       }
       get(*lorentz_factor)[s] = primitive_data.value().lorentz_factor;
+
+      if (primitive_inconsistency_fix != PrimitiveInconsistencyFix::None) {
+        apply_primitive_inconsistency_fix_at_point(
+            lorentz_factor, spatial_velocity, spatial_metric, s,
+            primitive_data.value().lorentz_factor, max_lorentz_factor,
+            max_velocity_squared, primitive_inconsistency_fix);
+      }
+
       get(*pressure)[s] = primitive_data.value().pressure;
       if constexpr (not eos_is_barotropic) {
         get(*specific_internal_energy)[s] =
