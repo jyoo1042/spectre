@@ -416,6 +416,139 @@ void test_primitive_from_conservative_known(const DataVector& used_for_size) {
   }
 }
 
+template <typename OrderedListOfPrimitiveRecoverySchemes,
+          bool UseMagneticField = true>
+void test_primitive_inconsistency_fix(const DataVector& used_for_size) {
+  const auto tilde_d = make_with_value<Scalar<DataVector>>(
+      used_for_size, 1.11149265181248676e-08);
+  const auto tilde_ye = make_with_value<Scalar<DataVector>>(used_for_size, 0.0);
+  const auto tilde_tau = make_with_value<Scalar<DataVector>>(
+      used_for_size, 5.84805421203407200e-07);
+  auto tilde_s = make_with_value<tnsr::i<DataVector, 3>>(used_for_size, 0.0);
+  get<0>(tilde_s) = 8.13859387076534455e-06;
+  get<1>(tilde_s) = -8.27333432112520750e-07;
+  get<2>(tilde_s) = 2.76135001822724115e-07;
+
+  auto tilde_b = make_with_value<tnsr::I<DataVector, 3>>(used_for_size, 0.0);
+  get<0>(tilde_b) = 3.38357151591602738e-06;
+  get<1>(tilde_b) = -2.68743390872016067e-04;
+  get<2>(tilde_b) = 7.06775108340741199e-04;
+
+  const auto tilde_phi = make_with_value<Scalar<DataVector>>(
+      used_for_size, -8.08592751533370515e-05);
+
+  auto spatial_metric =
+      make_with_value<tnsr::ii<DataVector, 3>>(used_for_size, 0.0);
+  get<0, 0>(spatial_metric) = 9.09795268331824104e+02;
+  get<0, 1>(spatial_metric) = -5.02938993025147809e-15;
+  get<0, 2>(spatial_metric) = -4.87835235209522988e+00;
+  get<1, 0>(spatial_metric) = -5.02938993025147809e-15;
+  get<1, 1>(spatial_metric) = 6.80108525652436313e+00;
+  get<1, 2>(spatial_metric) = 3.02162420859774037e-17;
+  get<2, 0>(spatial_metric) = -4.87835235209522988e+00;
+  get<2, 1>(spatial_metric) = 3.02162420859774037e-17;
+  get<2, 2>(spatial_metric) = 6.07468287177531097e-01;
+
+  auto inv_spatial_metric =
+      make_with_value<tnsr::II<DataVector, 3>>(used_for_size, 0.0);
+  get<0, 0>(inv_spatial_metric) = 1.14860801816691954e-03;
+  get<0, 1>(inv_spatial_metric) = -1.52118452779239890e-18;
+  get<0, 2>(inv_spatial_metric) = 9.22404468732780647e-03;
+  get<1, 0>(inv_spatial_metric) = -1.52118452779239890e-18;
+  get<1, 1>(inv_spatial_metric) = 1.47035357194013616e-01;
+  get<1, 2>(inv_spatial_metric) = 1.15402751341741297e-18;
+  get<2, 0>(inv_spatial_metric) = 9.22404468732780647e-03;
+  get<2, 1>(inv_spatial_metric) = 1.15402751341741297e-18;
+  get<2, 2>(inv_spatial_metric) = 1.72025134834875648e+00;
+
+  const auto sqrt_det_spatial_metric = make_with_value<Scalar<DataVector>>(
+      used_for_size, 5.99742731067497701e+01);
+
+  const size_t number_of_points = used_for_size.size();
+  const double initial_pressure = 1.11378009759276336e-13;
+  const double kastaun_max_lorentz = 50.0;
+  const double max_velocity_squared = 1.0 - 1.0 / square(kastaun_max_lorentz);
+
+  EquationsOfState::Equilibrium3D ideal_fluid{
+      EquationsOfState::IdealFluid<true>{4.0 / 3.0}};
+
+  // Compute gamma_{ij} v^i v^j at point 0
+  const auto velocity_squared_at_0 =
+      [&](const tnsr::I<DataVector, 3, Frame::Inertial>& vel) {
+        double vsq = 0.0;
+        for (size_t i = 0; i < 3; ++i) {
+          vsq += spatial_metric.get(i, i)[0] * square(vel.get(i)[0]);
+          for (size_t j = i + 1; j < 3; ++j) {
+            vsq += 2.0 * spatial_metric.get(i, j)[0] * vel.get(i)[0] *
+                   vel.get(j)[0];
+          }
+        }
+        return vsq;
+      };
+
+  // Run PFC with the given inconsistency fix and return lorentz_factor and
+  // spatial_velocity as outputs
+  const auto run_pfc =
+      [&](const grmhd::ValenciaDivClean::PrimitiveInconsistencyFix fix,
+          const gsl::not_null<Scalar<DataVector>*> lorentz_factor,
+          const gsl::not_null<tnsr::I<DataVector, 3>*> spatial_velocity) {
+        Scalar<DataVector> rest_mass_density(number_of_points);
+        Scalar<DataVector> electron_fraction(number_of_points);
+        Scalar<DataVector> specific_internal_energy(number_of_points);
+        Scalar<DataVector> temperature(number_of_points);
+        tnsr::I<DataVector, 3> magnetic_field(number_of_points);
+        Scalar<DataVector> divergence_cleaning_field(number_of_points);
+        // pressure must be initialized as it is used as the initial guess
+        Scalar<DataVector> pressure(number_of_points, initial_pressure);
+        const grmhd::ValenciaDivClean::PrimitiveFromConservativeOptions opts(
+            0.0, 0.0, kastaun_max_lorentz, fix);
+        grmhd::ValenciaDivClean::PrimitiveFromConservative<
+            OrderedListOfPrimitiveRecoverySchemes,
+            true>::apply(make_not_null(&rest_mass_density),
+                         make_not_null(&electron_fraction),
+                         make_not_null(&specific_internal_energy),
+                         spatial_velocity, make_not_null(&magnetic_field),
+                         make_not_null(&divergence_cleaning_field),
+                         lorentz_factor, make_not_null(&pressure),
+                         make_not_null(&temperature), tilde_d, tilde_ye,
+                         tilde_tau, tilde_s, tilde_b, tilde_phi, spatial_metric,
+                         inv_spatial_metric, sqrt_det_spatial_metric,
+                         ideal_fluid, opts);
+      };
+
+  // None: inconsistency should be present (v^2 from v^i exceeds v^2 from W)
+  {
+    Scalar<DataVector> lorentz_factor(number_of_points);
+    tnsr::I<DataVector, 3> spatial_velocity(number_of_points);
+    run_pfc(grmhd::ValenciaDivClean::PrimitiveInconsistencyFix::None,
+            make_not_null(&lorentz_factor), make_not_null(&spatial_velocity));
+    const double vsq = velocity_squared_at_0(spatial_velocity);
+    const double vsq_from_w = 1.0 - 1.0 / square(get(lorentz_factor)[0]);
+    CHECK(std::abs(vsq - vsq_from_w) > 1.0e-5);
+  }
+
+  // ScaleDown: spatial velocity rescaled so v^2 matches the recovered W
+  {
+    Scalar<DataVector> lorentz_factor(number_of_points);
+    tnsr::I<DataVector, 3> spatial_velocity(number_of_points);
+    run_pfc(grmhd::ValenciaDivClean::PrimitiveInconsistencyFix::ScaleDown,
+            make_not_null(&lorentz_factor), make_not_null(&spatial_velocity));
+    const double vsq = velocity_squared_at_0(spatial_velocity);
+    const double vsq_from_w = 1.0 - 1.0 / square(get(lorentz_factor)[0]);
+    CHECK(vsq == approx(vsq_from_w));
+  }
+
+  // SetToCap: W forced to cap, velocity rescaled to match max_velocity_squared
+  {
+    Scalar<DataVector> lorentz_factor(number_of_points);
+    tnsr::I<DataVector, 3> spatial_velocity(number_of_points);
+    run_pfc(grmhd::ValenciaDivClean::PrimitiveInconsistencyFix::SetToCap,
+            make_not_null(&lorentz_factor), make_not_null(&spatial_velocity));
+    CHECK(get(lorentz_factor)[0] == approx(kastaun_max_lorentz));
+    const double vsq = velocity_squared_at_0(spatial_velocity);
+    CHECK(vsq == approx(max_velocity_squared));
+  }
+}
 }  // namespace
 
 SPECTRE_TEST_CASE("Unit.GrMhd.ValenciaDivClean.PrimitiveFromConservative",
@@ -541,4 +674,8 @@ SPECTRE_TEST_CASE("Unit.GrMhd.ValenciaDivClean.PrimitiveFromConservative",
       wrapped_3d_polytrope_hot, make_with_value<Scalar<DataVector>>(dv, 1e-4),
       make_with_value<Scalar<DataVector>>(dv, 1e-1),
       make_with_value<Scalar<DataVector>>(dv, 1.0), &generator);
+
+  const DataVector dw(1);
+  test_primitive_inconsistency_fix<tmpl::list<
+      grmhd::ValenciaDivClean::PrimitiveRecoverySchemes::KastaunEtAl>>(dw);
 }
