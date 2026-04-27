@@ -114,10 +114,13 @@ void test_potentially_eos_dependent_primitive_corrections(
   const double density_when_skipping_inversion = 0.0;
   const double kastaun_max_lorentz =
       0.5 * sqrt(std::numeric_limits<double>::max());
+  const grmhd::ValenciaDivClean::PrimitiveInconsistencyFix
+      primitive_inconsistency_fix =
+          grmhd::ValenciaDivClean::PrimitiveInconsistencyFix::None;
   const grmhd::ValenciaDivClean::PrimitiveFromConservativeOptions
-      primitive_from_conservative_options(cutoff_d_for_inversion,
-                                          density_when_skipping_inversion,
-                                          kastaun_max_lorentz);
+      primitive_from_conservative_options(
+          cutoff_d_for_inversion, density_when_skipping_inversion,
+          kastaun_max_lorentz, primitive_inconsistency_fix);
 
   Scalar<DataVector> rest_mass_density(number_of_points);
   Scalar<DataVector> electron_fraction(number_of_points);
@@ -231,10 +234,13 @@ void test_primitive_from_conservative_random(
   const double density_when_skipping_inversion = 0.0;
   const double kastaun_max_lorentz =
       0.5 * sqrt(std::numeric_limits<double>::max());
+  const grmhd::ValenciaDivClean::PrimitiveInconsistencyFix
+      primitive_inconsistency_fix =
+          grmhd::ValenciaDivClean::PrimitiveInconsistencyFix::None;
   const grmhd::ValenciaDivClean::PrimitiveFromConservativeOptions
-      primitive_from_conservative_options(cutoff_d_for_inversion,
-                                          density_when_skipping_inversion,
-                                          kastaun_max_lorentz);
+      primitive_from_conservative_options(
+          cutoff_d_for_inversion, density_when_skipping_inversion,
+          kastaun_max_lorentz, primitive_inconsistency_fix);
   Scalar<DataVector> rest_mass_density(number_of_points);
   Scalar<DataVector> electron_fraction(number_of_points);
   Scalar<DataVector> specific_internal_energy(number_of_points);
@@ -335,10 +341,13 @@ void test_primitive_from_conservative_known(const DataVector& used_for_size) {
   const double cutoff_d_for_inversion = 0.0;
   const double density_when_skipping_inversion = 0.0;
   const double kastaun_max_lorentz = 1.0e4;
+  const grmhd::ValenciaDivClean::PrimitiveInconsistencyFix
+      primitive_inconsistency_fix =
+          grmhd::ValenciaDivClean::PrimitiveInconsistencyFix::None;
   const grmhd::ValenciaDivClean::PrimitiveFromConservativeOptions
-      primitive_from_conservative_options(cutoff_d_for_inversion,
-                                          density_when_skipping_inversion,
-                                          kastaun_max_lorentz);
+      primitive_from_conservative_options(
+          cutoff_d_for_inversion, density_when_skipping_inversion,
+          kastaun_max_lorentz, primitive_inconsistency_fix);
 
   grmhd::ValenciaDivClean::ConservativeFromPrimitive::apply(
       make_not_null(&tilde_d), make_not_null(&tilde_ye),
