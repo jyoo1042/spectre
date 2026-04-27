@@ -152,8 +152,8 @@ class FunctionOfMu {
       const double r_squared_bound =
           4.0 * v_0_squared_ * square(q_ + 1.0) / square(1.0 + v_0_squared_);
       if (r_squared_bound < r_squared_) {
-        r_squared_ = r_squared_bound;
         r_dot_b_squared_ *= r_squared_bound / r_squared_;
+        r_squared_ = r_squared_bound;
       }
 
     } else {
